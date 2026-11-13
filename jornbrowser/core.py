@@ -555,12 +555,12 @@ def socks5_probe(port: int, host: str = "1.1.1.1", dst_port: int = 443, timeout:
         return False
 
 
-def measure_latency(port: int, n: int = 3) -> int | None:
+def measure_latency(port: int, n: int = 2, timeout: float = 2) -> int | None:
     """Reactietijd (ms, mediaan) van een echte verbinding via de tunnel naar buiten."""
     times = []
     for _ in range(n):
         t = time.monotonic()
-        if socks5_probe(port, timeout=3):
+        if socks5_probe(port, timeout=timeout):
             times.append((time.monotonic() - t) * 1000)
     if not times:
         return None
@@ -609,12 +609,16 @@ class VpnTunnel:
         self.process: subprocess.Popen | None = None
         self.latency_ms: int | None = None
 
-    def start(self, timeout: float = 12) -> None:
+    @property
+    def _cfg_file(self) -> Path:
+        return self.workdir / f"tunnel-{self.port}.conf"
+
+    def start(self, timeout: float = 8) -> None:
         exe = find_wireproxy()
         if not exe:
             raise FileNotFoundError("wireproxy niet gevonden (hoort naast/in JornBrowser.exe).")
         self.port = free_port()
-        cfg_file = self.workdir / "tunnel.conf"
+        cfg_file = self._cfg_file
         cfg_file.write_text(wireproxy_config(self.conf.read_text(encoding="utf-8-sig"), self.port),
                             encoding="utf-8")
         kwargs = {}
@@ -647,7 +651,8 @@ class VpnTunnel:
                 self.process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 pass
-        (self.workdir / "tunnel.conf").unlink(missing_ok=True)
+        if self.port:
+            self._cfg_file.unlink(missing_ok=True)
 
 
 # --------------------------------------------------------------------------- ingebouwde zoek-extensie
@@ -1192,58 +1197,124 @@ class IdentityManager:
         if not free:
             raise ValueError("Alle VPN-servers zijn al in gebruik door een open identiteit. "
                              "Voeg meer .conf-bestanden toe of sluit een identiteit.")
-        tried: list[str] = []
         preferred = next((c for c in free if c.name == prefer), None) if prefer else None
         if preferred:  # bewaarde identiteit: eerst haar eigen server (= zelfde IP), ook als die traag is
-            tried.append(str(preferred))
             tunnel = VpnTunnel(preferred, profile)
             try:
                 tunnel.start()
-                tunnel.latency_ms = measure_latency(tunnel.port)
-                record_speed(tunnel.name, tunnel.latency_ms)
+                self._measure_later(tunnel)
                 return tunnel
             except ConnectionError:
                 record_speed(preferred.stem, None)
         skip_slow = self.cfg.get("skip_slow_servers", True)
         max_ms = int(self.cfg.get("max_latency_ms", 500))
+        pool = [c for c in free if c != preferred]
+        if not pool:
+            raise ConnectionError(f"Geen verbinding met VPN-server '{preferred.stem}'.")
         speeds = load_speeds()
-        pool = [c for c in free if str(c) not in tried]
         if skip_slow:
             fast = [c for c in pool if not known_slow(c.stem, max_ms, speeds)]
-            if fast:
-                if len(fast) < len(pool):
-                    log(f"trage servers overgeslagen: {len(pool) - len(fast)}")
-                pool = fast
-        self.picker.order = self.cfg.get("proxy_order", "random")
-        best: VpnTunnel | None = None  # traag maar werkend: reserve als niets sneller lukt
-        for _ in range(min(5, len(pool))):  # werkt een server niet of is hij traag? volgende
-            choice = self.picker.pick([Proxy(str(c)) for c in pool if str(c) not in tried])
-            tried.append(choice.url)
-            tunnel = VpnTunnel(Path(choice.url), profile)
+            if fast and len(fast) < len(pool):
+                log(f"trage/kapotte servers overgeslagen: {len(pool) - len(fast)}")
+            pool = fast or pool
+        else:  # ook zonder overslaan: servers die net niet werkten achteraan
+            pool = sorted(pool, key=lambda c: (speeds.get(c.stem) or {}).get("ms", 0) is None)
+        if self.cfg.get("proxy_order", "random") == "sequential":
+            k = self.picker._i % len(pool)
+            self.picker._i += 1
+            order = pool[k:] + pool[:k]
+        else:
+            order = random.sample(pool, len(pool))
+            if len(order) > 1 and self.picker._last and order[0].name == self.picker._last:
+                order.append(order.pop(0))  # niet twee keer na elkaar dezelfde
+        if not find_wireproxy():
+            raise FileNotFoundError("wireproxy niet gevonden (hoort naast/in JornBrowser.exe).")
+        # Tot 3 servers TEGELIJK proberen; de eerste goede wint, de rest stopt.
+        # Zo kost een dode of trage server geen extra wachttijd.
+        import queue
+        import threading
+        results: queue.Queue = queue.Queue()
+        done = threading.Event()
+
+        def attempt(conf: Path):
+            t = VpnTunnel(conf, profile)
             try:
-                tunnel.start()
-            except ConnectionError:
-                record_speed(tunnel.name, None)
-                continue
-            tunnel.latency_ms = measure_latency(tunnel.port)
-            record_speed(tunnel.name, tunnel.latency_ms)
-            ms = tunnel.latency_ms
-            if not skip_slow or (ms is not None and ms <= max_ms):
+                t.start()
+            except Exception:  # noqa: BLE001
+                record_speed(conf.stem, None)
+                results.put((t, False))
+                return
+            if skip_slow:
+                t.latency_ms = measure_latency(t.port, timeout=max(1.0, 2 * max_ms / 1000))
+                record_speed(t.name, t.latency_ms)
+            ok = not skip_slow or (t.latency_ms is not None and t.latency_ms <= max_ms)
+            if done.is_set():  # er was al een winnaar
+                t.stop()
+                ok = False
+            results.put((t, ok))
+
+        candidates = order[:6]
+        running = 0
+        nxt = 0
+        best: VpnTunnel | None = None  # traag maar werkend: reserve als niets sneller lukt
+        while nxt < len(candidates) and running < 3:
+            threading.Thread(target=attempt, args=(candidates[nxt],), daemon=True).start()
+            nxt += 1
+            running += 1
+        while running:
+            t, ok = results.get()
+            running -= 1
+            if ok:
+                done.set()
                 if best:
                     best.stop()
-                return tunnel
-            log(f"VPN traag: {tunnel.name} ({ms} ms), volgende proberen")
-            if best is None or (ms is not None and (best.latency_ms is None or ms < best.latency_ms)):
-                if best:
-                    best.stop()
-                best = tunnel
-            else:
-                tunnel.stop()
+                self._drain(results, running)
+                if not skip_slow:
+                    self._measure_later(t)
+                self.picker._last = t.conf.name
+                return t
+            if t.process is not None and t.latency_ms is not None:  # werkt, maar traag
+                log(f"VPN traag: {t.name} ({t.latency_ms} ms)")
+                if best is None or t.latency_ms < (best.latency_ms or 10**6):
+                    if best:
+                        best.stop()
+                    best = t
+                else:
+                    t.stop()
+            if nxt < len(candidates):
+                threading.Thread(target=attempt, args=(candidates[nxt],), daemon=True).start()
+                nxt += 1
+                running += 1
         if best:
             log(f"geen snelle server gevonden, snelste genomen: {best.name} ({best.latency_ms} ms)")
             return best
         raise ConnectionError("Geen verbinding met de VPN (geprobeerd: "
-                              + ", ".join(Path(t).stem for t in tried) + ").")
+                              + ", ".join(c.stem for c in candidates) + ").")
+
+    @staticmethod
+    def _drain(results, running: int) -> None:
+        """Stop tunnels die na de winnaar nog binnenkomen (op de achtergrond)."""
+        import threading
+
+        def work():
+            for _ in range(running):
+                try:
+                    t, _ok = results.get(timeout=20)
+                except Exception:  # noqa: BLE001
+                    return
+                t.stop()
+        if running:
+            threading.Thread(target=work, daemon=True).start()
+
+    @staticmethod
+    def _measure_later(tunnel: VpnTunnel) -> None:
+        """Reactietijd meten zonder het openen van het venster op te houden."""
+        import threading
+
+        def work():
+            tunnel.latency_ms = measure_latency(tunnel.port)
+            record_speed(tunnel.name, tunnel.latency_ms)
+        threading.Thread(target=work, daemon=True).start()
 
     def _stop_browser(self, ident: Identity, graceful: bool) -> None:
         if not ident.alive():
