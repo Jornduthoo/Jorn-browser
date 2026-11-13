@@ -247,18 +247,34 @@ class App(tk.Tk):
         self.chromium_path = tk.StringVar(value=str(found) if found else "")
         ttk.Entry(row, textvariable=self.chromium_path).pack(side="left", fill="x", expand=True)
         ttk.Button(row, text="Kiezen…", command=self.pick_chromium).pack(side="left", padx=(8, 0))
+        ttk.Button(row, text="Datamap", command=lambda: open_path(core.data_dir())).pack(side="left", padx=(6, 0))
 
         c2 = T.card(f)
         c2.outer.pack(fill="x", pady=(12, 0))
         ttk.Label(c2, text="Startpagina", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(c2, text="Tip: met een VPN geeft Google vaak captchas. Deze zoekmachines niet.",
+                  style="CardMuted.TLabel").pack(anchor="w", pady=(2, 0))
         self.start_url = tk.StringVar(value=self.cfg["start_url"])
-        ttk.Entry(c2, textvariable=self.start_url).pack(fill="x", pady=(6, 10))
+        names = list(core.START_PAGES)
+        current = next((n for n, u in core.START_PAGES.items() if u == self.cfg["start_url"]), "")
+        self.start_choice = tk.StringVar(value=current or "Eigen adres")
+        combo = ttk.Combobox(c2, textvariable=self.start_choice, values=names + ["Eigen adres"],
+                             state="readonly")
+        combo.pack(fill="x", pady=(6, 6))
+
+        def on_pick(_e=None):
+            url = core.START_PAGES.get(self.start_choice.get())
+            if url:
+                self.start_url.set(url)
+                self._save_settings()
+        combo.bind("<<ComboboxSelected>>", on_pick)
+        ttk.Entry(c2, textvariable=self.start_url).pack(fill="x", pady=(0, 10))
         ttk.Label(c2, text="IP-controlepagina", style="CardTitle.TLabel").pack(anchor="w")
         self.check_url = tk.StringVar(value=self.cfg["check_url"])
-        ttk.Entry(c2, textvariable=self.check_url).pack(fill="x", pady=(6, 10))
-        ttk.Button(c2, text="Opslaan", command=self._save_settings).pack(anchor="e")
-
-        ttk.Button(f, text="Datamap openen", command=lambda: open_path(core.data_dir())).pack(anchor="w", pady=(12, 0))
+        iprow = ttk.Frame(c2, style="Card.TFrame")
+        iprow.pack(fill="x", pady=(6, 0))
+        ttk.Entry(iprow, textvariable=self.check_url).pack(side="left", fill="x", expand=True)
+        ttk.Button(iprow, text="Opslaan", command=self._save_settings).pack(side="left", padx=(8, 0))
         return f
 
     # ------------------------------------------------------------------ acties

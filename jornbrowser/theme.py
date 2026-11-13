@@ -118,6 +118,14 @@ def apply(root: tk.Tk) -> dict:
     s.configure("TEntry", fieldbackground=PANEL_HI, foreground=TEXT, insertcolor=TEXT,
                 bordercolor=BORDER, lightcolor=BORDER, darkcolor=BORDER, padding=6)
     s.map("TEntry", bordercolor=[("focus", ACCENT_MID)], lightcolor=[("focus", ACCENT_MID)])
+    s.configure("TCombobox", fieldbackground=PANEL_HI, background=PANEL_HI, foreground=TEXT,
+                arrowcolor=TEXT, bordercolor=BORDER, lightcolor=BORDER, darkcolor=BORDER, padding=6)
+    s.map("TCombobox", fieldbackground=[("readonly", PANEL_HI)], foreground=[("readonly", TEXT)],
+          selectbackground=[("readonly", PANEL_HI)], selectforeground=[("readonly", TEXT)],
+          bordercolor=[("focus", ACCENT_MID)])
+    root.option_add("*TCombobox*Listbox.background", PANEL_HI)
+    root.option_add("*TCombobox*Listbox.foreground", TEXT)
+    root.option_add("*TCombobox*Listbox.selectBackground", ACCENT_MID)
     s.configure("TSeparator", background=BORDER)
     s.configure("Vertical.TScrollbar", background=PANEL_HI, troughcolor=PANEL, arrowcolor=MUTED,
                 bordercolor=PANEL, lightcolor=PANEL_HI, darkcolor=PANEL_HI)

@@ -63,9 +63,18 @@ DEFAULT_CONFIG = {
     # "vpn"   = ingebouwde VPN: elke identiteit een eigen WireGuard-tunnel (data/vpn/*.conf)
     "proxy_mode": "vpn",
     "proxy_order": "random",  # of "sequential"
-    "start_url": "about:blank",
+    "start_url": "https://duckduckgo.com/",
     "check_url": "https://am.i.mullvad.net/",
     "block_webrtc_leak": True,
+}
+
+
+# Zoekmachines die met een VPN (bijna) nooit captchas tonen.
+START_PAGES = {
+    "DuckDuckGo": "https://duckduckgo.com/",
+    "Startpage (Google-resultaten, privé)": "https://www.startpage.com/",
+    "Brave Search": "https://search.brave.com/",
+    "Leeg (about:blank)": "about:blank",
 }
 
 
@@ -79,6 +88,11 @@ def load_config() -> dict:
         cfg.update(json.loads(config_path().read_text(encoding="utf-8")))
     except (OSError, ValueError):
         pass
+    if cfg.get("config_version", 1) < 2:
+        # v2: standaard-startpagina wordt DuckDuckGo i.p.v. een lege pagina
+        if cfg.get("start_url") in ("", "about:blank"):
+            cfg["start_url"] = DEFAULT_CONFIG["start_url"]
+        cfg["config_version"] = 2
     return cfg
 
 
