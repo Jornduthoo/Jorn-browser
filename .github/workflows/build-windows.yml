@@ -1,0 +1,24 @@
+name: Windows .exe bouwen
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: PyInstaller installeren
+        run: pip install pyinstaller==6.11.1
+      - name: Bouwen
+        run: pyinstaller --noconfirm --onefile --windowed --name JornBrowser jornbrowser.pyw
+      - name: Snelle controle (import)
+        run: python -c "import jornbrowser.app, jornbrowser.core; print('ok')"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: JornBrowser-windows
+          path: dist/JornBrowser.exe
