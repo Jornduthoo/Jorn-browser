@@ -60,7 +60,8 @@ DEFAULT_CONFIG = {
     "chromium_path": "",
     # "none"  = geen proxy; je systeem-VPN (bv. VPN Unlimited) bepaalt het IP
     # "list"  = elke identiteit krijgt een proxy uit proxies.txt
-    "proxy_mode": "none",
+    # "vpn"   = ingebouwde VPN: elke identiteit een eigen WireGuard-tunnel (data/vpn/*.conf)
+    "proxy_mode": "vpn",
     "proxy_order": "random",  # of "sequential"
     "start_url": "about:blank",
     "check_url": "https://am.i.mullvad.net/",
@@ -331,6 +332,174 @@ def remove_extension(ext: Extension) -> None:
     shutil.rmtree(ext.path, ignore_errors=True)
 
 
+# --------------------------------------------------------------------------- ingebouwde VPN
+#
+# Elke identiteit krijgt een eigen WireGuard-tunnel, gedraaid door wireproxy
+# (een kleine WireGuard-client zonder installatie of adminrechten). wireproxy
+# biedt de tunnel lokaal aan als SOCKS5-proxy en alleen Chromium gaat erdoor.
+# Valt de tunnel weg, dan kan Chromium nergens meer heen: je echte IP lekt niet.
+
+def vpn_dir() -> Path:
+    d = data_dir() / "vpn"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def list_vpn_configs() -> list[Path]:
+    return sorted(p for p in vpn_dir().glob("*.conf") if p.is_file())
+
+
+def import_vpn_configs(paths: list[str | Path]) -> int:
+    """Kopieert .conf-bestanden (of .conf's uit een .zip) naar data/vpn."""
+    n = 0
+    for src in map(Path, paths):
+        if src.suffix.lower() == ".zip":
+            with zipfile.ZipFile(src) as zf:
+                for name in zf.namelist():
+                    if name.lower().endswith(".conf") and not name.endswith("/"):
+                        text = zf.read(name).decode("utf-8-sig", errors="replace")
+                        sanitize_wg_config(text)  # gooit een fout als het geen WireGuard is
+                        (vpn_dir() / Path(name).name).write_text(text, encoding="utf-8")
+                        n += 1
+        elif src.suffix.lower() == ".conf":
+            text = src.read_text(encoding="utf-8-sig", errors="replace")
+            sanitize_wg_config(text)
+            (vpn_dir() / src.name).write_text(text, encoding="utf-8")
+            n += 1
+    return n
+
+
+WG_ALLOWED_KEYS = {
+    "interface": {"privatekey", "address", "dns", "mtu", "listenport"},
+    "peer": {"publickey", "presharedkey", "endpoint", "allowedips", "persistentkeepalive"},
+}
+WG_KEY_CASE = {
+    "privatekey": "PrivateKey", "address": "Address", "dns": "DNS", "mtu": "MTU",
+    "listenport": "ListenPort", "publickey": "PublicKey", "presharedkey": "PresharedKey",
+    "endpoint": "Endpoint", "allowedips": "AllowedIPs", "persistentkeepalive": "PersistentKeepalive",
+}
+
+
+def sanitize_wg_config(text: str) -> str:
+    """Houdt alleen de WireGuard-velden over die wireproxy begrijpt."""
+    sections: list[tuple[str, list[tuple[str, str]]]] = []
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        m = re.match(r"^\[(\w+)\]$", line)
+        if m:
+            sections.append((m.group(1).lower(), []))
+            continue
+        if "=" in line and sections:
+            k, v = line.split("=", 1)
+            k = k.strip().lower()
+            if k in WG_ALLOWED_KEYS.get(sections[-1][0], set()):
+                sections[-1][1].append((WG_KEY_CASE[k], v.strip()))
+    iface = [kv for name, kv in sections if name == "interface"]
+    peers = [kv for name, kv in sections if name == "peer"]
+    if len(iface) != 1 or not peers:
+        raise ValueError("Geen geldig WireGuard-bestand ([Interface] en [Peer] nodig).")
+    ikeys = {k for k, _ in iface[0]}
+    if not {"PrivateKey", "Address"} <= ikeys:
+        raise ValueError("WireGuard-bestand mist PrivateKey of Address.")
+    for peer in peers:
+        if not {"PublicKey", "Endpoint"} <= {k for k, _ in peer}:
+            raise ValueError("WireGuard-bestand mist PublicKey of Endpoint bij [Peer].")
+    if "DNS" not in ikeys:
+        iface[0].append(("DNS", "1.1.1.1"))  # DNS gaat ook door de tunnel
+    out = ["[Interface]"] + [f"{k} = {v}" for k, v in iface[0]]
+    for peer in peers:
+        out += ["", "[Peer]"] + [f"{k} = {v}" for k, v in peer]
+    return "\n".join(out) + "\n"
+
+
+def wireproxy_config(wg_text: str, port: int) -> str:
+    return sanitize_wg_config(wg_text) + f"\n[Socks5]\nBindAddress = 127.0.0.1:{port}\n"
+
+
+def find_wireproxy() -> Path | None:
+    exe = "wireproxy.exe" if os.name == "nt" else "wireproxy"
+    cands = []
+    if getattr(sys, "_MEIPASS", None):  # meegebundeld in JornBrowser.exe
+        cands.append(Path(sys._MEIPASS) / exe)
+    cands += [app_dir() / exe, app_dir() / "bin" / exe]
+    for c in cands:
+        if c.is_file():
+            return c
+    w = shutil.which("wireproxy")
+    return Path(w) if w else None
+
+
+def free_port() -> int:
+    import socket
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def socks5_probe(port: int, host: str = "1.1.1.1", dst_port: int = 443, timeout: float = 4) -> bool:
+    """True als we via de lokale SOCKS5-proxy echt een verbinding naar buiten krijgen."""
+    import socket
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=timeout) as s:
+            s.settimeout(timeout)
+            s.sendall(b"\x05\x01\x00")
+            if s.recv(2) != b"\x05\x00":
+                return False
+            s.sendall(b"\x05\x01\x00\x01" + socket.inet_aton(host) + struct.pack(">H", dst_port))
+            reply = s.recv(10)
+            return len(reply) >= 2 and reply[1] == 0
+    except OSError:
+        return False
+
+
+class VpnTunnel:
+    def __init__(self, conf: Path, workdir: Path):
+        self.conf = conf
+        self.name = conf.stem
+        self.workdir = workdir
+        self.port = 0
+        self.process: subprocess.Popen | None = None
+
+    def start(self, timeout: float = 12) -> None:
+        exe = find_wireproxy()
+        if not exe:
+            raise FileNotFoundError("wireproxy niet gevonden (hoort naast/in JornBrowser.exe).")
+        self.port = free_port()
+        cfg_file = self.workdir / "tunnel.conf"
+        cfg_file.write_text(wireproxy_config(self.conf.read_text(encoding="utf-8-sig"), self.port),
+                            encoding="utf-8")
+        kwargs = {}
+        if os.name == "nt":
+            kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        self.process = subprocess.Popen([str(exe), "-s", "-c", str(cfg_file)],
+                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **kwargs)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if self.process.poll() is not None:
+                break
+            if socks5_probe(self.port):
+                cfg_file.unlink(missing_ok=True)  # privésleutel niet laten rondslingeren
+                return
+            time.sleep(0.2)
+        self.stop()
+        raise ConnectionError(f"VPN-server '{self.name}' reageert niet.")
+
+    @property
+    def proxy(self) -> Proxy:
+        return Proxy(f"socks5://127.0.0.1:{self.port}", f"VPN {self.name}")
+
+    def stop(self) -> None:
+        if self.process and self.process.poll() is None:
+            self.process.kill()
+            try:
+                self.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+        (self.workdir / "tunnel.conf").unlink(missing_ok=True)
+
+
 # --------------------------------------------------------------------------- identiteiten
 
 def build_args(chromium: Path, profile: Path, proxy: Proxy | None,
@@ -377,12 +546,16 @@ class Identity:
     profile: Path
     proxy: Proxy | None
     process: subprocess.Popen
+    tunnel: "VpnTunnel | None" = None
 
     def alive(self) -> bool:
         return self.process.poll() is None
 
     def describe(self) -> str:
-        via = self.proxy.display() if self.proxy else "systeem-VPN / directe verbinding"
+        if self.tunnel:
+            via = f"VPN {self.tunnel.name}"
+        else:
+            via = self.proxy.display() if self.proxy else "systeem-VPN / directe verbinding"
         return f"Identiteit #{self.number} via {via}"
 
 
@@ -408,13 +581,22 @@ class IdentityManager:
         if not chromium:
             raise FileNotFoundError("Chromium niet gevonden. Kies chrome.exe via Instellingen.")
         proxy = None
-        if self.cfg.get("proxy_mode") == "list":
+        tunnel = None
+        self.counter += 1
+        profile = Path(tempfile.mkdtemp(prefix=f"id{self.counter}-", dir=profiles_root()))
+        if self.cfg.get("proxy_mode") == "vpn":
+            try:
+                tunnel = self._start_tunnel(profile)
+            except Exception:
+                wipe_dir(profile)
+                raise
+            proxy = tunnel.proxy
+        elif self.cfg.get("proxy_mode") == "list":
             self.picker.order = self.cfg.get("proxy_order", "random")
             proxy = self.picker.pick(load_proxies())
             if proxy is None:
+                wipe_dir(profile)
                 raise ValueError("Proxy-modus staat aan, maar proxies.txt is leeg.")
-        self.counter += 1
-        profile = Path(tempfile.mkdtemp(prefix=f"id{self.counter}-", dir=profiles_root()))
         exts = [e.path for e in list_extensions() if e.enabled]
         args = build_args(chromium, profile, proxy, exts, self.cfg)
         if url:
@@ -422,10 +604,40 @@ class IdentityManager:
         kwargs = {}
         if os.name == "nt":
             kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
-        proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **kwargs)
-        ident = Identity(self.counter, profile, proxy, proc)
+        try:
+            proc = subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **kwargs)
+        except Exception:
+            if tunnel:
+                tunnel.stop()
+            wipe_dir(profile)
+            raise
+        ident = Identity(self.counter, profile, proxy, proc, tunnel)
         self.identities.append(ident)
         return ident
+
+    def _start_tunnel(self, profile: Path) -> VpnTunnel:
+        configs = list_vpn_configs()
+        if not configs:
+            raise ValueError("Nog geen VPN-servers. Voeg WireGuard-bestanden (.conf) toe "
+                             "via het tabblad Netwerk.")
+        in_use = {i.tunnel.conf for i in self.identities if i.tunnel}
+        free = [c for c in configs if c not in in_use]
+        if not free:
+            raise ValueError("Alle VPN-servers zijn al in gebruik door een open identiteit. "
+                             "Voeg meer .conf-bestanden toe of sluit een identiteit.")
+        self.picker.order = self.cfg.get("proxy_order", "random")
+        tried: list[str] = []
+        for _ in range(min(3, len(free))):  # werkt een server niet? probeer de volgende
+            choice = self.picker.pick([Proxy(str(c)) for c in free if str(c) not in tried])
+            tried.append(choice.url)
+            tunnel = VpnTunnel(Path(choice.url), profile)
+            try:
+                tunnel.start()
+                return tunnel
+            except ConnectionError:
+                continue
+        raise ConnectionError("Geen verbinding met de VPN (geprobeerd: "
+                              + ", ".join(Path(t).stem for t in tried) + ").")
 
     def close(self, ident: Identity) -> None:
         if ident.alive():
@@ -440,6 +652,8 @@ class IdentityManager:
                 ident.process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 ident.process.kill()
+        if ident.tunnel:
+            ident.tunnel.stop()
         wipe_dir(ident.profile)
         if ident in self.identities:
             self.identities.remove(ident)

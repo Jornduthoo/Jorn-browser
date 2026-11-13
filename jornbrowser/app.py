@@ -79,28 +79,38 @@ class App(tk.Tk):
     def _build_network(self, parent):
         f = ttk.Frame(parent, padding=12)
         self.proxy_mode = tk.StringVar(value=self.cfg["proxy_mode"])
-        ttk.Radiobutton(f, text="Geen proxy: mijn VPN-app (bv. VPN Unlimited) bepaalt het IP",
-                        value="none", variable=self.proxy_mode, command=self._save_net).pack(anchor="w")
-        ttk.Label(f, text="Ander IP = in je VPN-app van server wisselen, daarna 'Nieuwe identiteit'.",
+
+        ttk.Radiobutton(f, text="Ingebouwde VPN (aanbevolen): elke identiteit een andere VPN-server",
+                        value="vpn", variable=self.proxy_mode, command=self._save_net).pack(anchor="w")
+        ttk.Label(f, text="Geen VPN-app nodig. Voeg WireGuard-bestanden (.conf) toe van je VPN-dienst.",
                   foreground="#555").pack(anchor="w", padx=22)
-        ttk.Radiobutton(f, text="Proxylijst: elke identiteit krijgt automatisch een ander IP",
-                        value="list", variable=self.proxy_mode, command=self._save_net).pack(anchor="w", pady=(10, 0))
+        vbtn = ttk.Frame(f)
+        vbtn.pack(anchor="w", padx=22, pady=4)
+        ttk.Button(vbtn, text="VPN-bestanden toevoegen…", command=self.add_vpn_configs).pack(side="left")
+        ttk.Button(vbtn, text="VPN-map openen", command=lambda: open_path(core.vpn_dir())).pack(side="left", padx=6)
+        self.vpn_count = tk.StringVar()
+        ttk.Label(f, textvariable=self.vpn_count, foreground="#555").pack(anchor="w", padx=22)
 
-        order = ttk.Frame(f)
-        order.pack(anchor="w", padx=22, pady=4)
-        self.proxy_order = tk.StringVar(value=self.cfg["proxy_order"])
-        ttk.Label(order, text="Volgorde:").pack(side="left")
-        ttk.Radiobutton(order, text="willekeurig", value="random", variable=self.proxy_order,
-                        command=self._save_net).pack(side="left")
-        ttk.Radiobutton(order, text="na elkaar", value="sequential", variable=self.proxy_order,
-                        command=self._save_net).pack(side="left")
-
+        ttk.Radiobutton(f, text="Proxylijst (proxies.txt)", value="list", variable=self.proxy_mode,
+                        command=self._save_net).pack(anchor="w", pady=(10, 0))
         btns = ttk.Frame(f)
         btns.pack(anchor="w", padx=22, pady=4)
         ttk.Button(btns, text="proxies.txt bewerken", command=self.edit_proxies).pack(side="left")
         ttk.Button(btns, text="Mullvad-lijst ophalen", command=self.fetch_mullvad).pack(side="left", padx=6)
         self.proxy_count = tk.StringVar()
         ttk.Label(f, textvariable=self.proxy_count, foreground="#555").pack(anchor="w", padx=22)
+
+        ttk.Radiobutton(f, text="Geen: een aparte VPN-app op je pc bepaalt het IP", value="none",
+                        variable=self.proxy_mode, command=self._save_net).pack(anchor="w", pady=(10, 0))
+
+        order = ttk.Frame(f)
+        order.pack(anchor="w", pady=(12, 0))
+        self.proxy_order = tk.StringVar(value=self.cfg["proxy_order"])
+        ttk.Label(order, text="Server kiezen:").pack(side="left")
+        ttk.Radiobutton(order, text="willekeurig", value="random", variable=self.proxy_order,
+                        command=self._save_net).pack(side="left")
+        ttk.Radiobutton(order, text="na elkaar", value="sequential", variable=self.proxy_order,
+                        command=self._save_net).pack(side="left")
         self._refresh_proxy_count()
 
         ttk.Separator(f).pack(fill="x", pady=12)
@@ -168,13 +178,37 @@ class App(tk.Tk):
             self.status.set(done_msg(result) if callable(done_msg) else done_msg)
         return result
 
+    def _run_bg(self, fn, done_msg, busy_msg):
+        """Zoals _run, maar in de achtergrond (VPN verbinden duurt even)."""
+        if getattr(self, "_busy", False):
+            return
+        self._busy = True
+        self.status.set(busy_msg)
+
+        def work():
+            try:
+                result = fn()
+                self.after(0, lambda: self._bg_done(done_msg(result), None))
+            except Exception as e:  # noqa: BLE001
+                err = str(e)
+                self.after(0, lambda: self._bg_done(None, err))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _bg_done(self, msg, err):
+        self._busy = False
+        self._refresh_identities()
+        if err:
+            self.status.set("Fout: " + err)
+            messagebox.showerror("Jorn Browser", err)
+        else:
+            self.status.set(msg)
+
     def new_identity(self):
-        self.status.set("Nieuwe identiteit starten…")
-        self.update_idletasks()
-        self._run(self.mgr.new_identity, lambda i: f"✔ {i.describe()}")
+        self._run_bg(self.mgr.new_identity, lambda i: f"✔ {i.describe()}", "Nieuwe identiteit starten…")
 
     def extra_identity(self):
-        self._run(self.mgr.spawn, lambda i: f"✔ Extra: {i.describe()}")
+        self._run_bg(self.mgr.spawn, lambda i: f"✔ Extra: {i.describe()}", "Extra identiteit starten…")
 
     def close_all(self):
         self._run(self.mgr.close_all, "Alle identiteiten gesloten en gewist.")
@@ -188,7 +222,8 @@ class App(tk.Tk):
     def show_ip(self):
         """Opent de IP-controlepagina in elke actieve identiteit (dus via haar eigen proxy)."""
         if not self.mgr.identities:
-            self._run(lambda: self.mgr.spawn(self.cfg["check_url"]), lambda i: f"✔ {i.describe()}")
+            self._run_bg(lambda: self.mgr.spawn(self.cfg["check_url"]), lambda i: f"✔ {i.describe()}",
+                         "Identiteit starten…")
             return
         chromium = core.find_chromium(self.cfg)
         for ident in self.mgr.identities:
@@ -260,6 +295,26 @@ class App(tk.Tk):
     def _refresh_proxy_count(self):
         n = len(core.load_proxies())
         self.proxy_count.set(f"{n} proxy's in proxies.txt")
+        names = [c.stem for c in core.list_vpn_configs()]
+        if names:
+            shown = ", ".join(names[:6]) + (" …" if len(names) > 6 else "")
+            self.vpn_count.set(f"{len(names)} VPN-server(s): {shown}")
+        else:
+            self.vpn_count.set("Nog geen VPN-servers toegevoegd.")
+
+    def add_vpn_configs(self):
+        paths = filedialog.askopenfilenames(
+            title="Kies WireGuard-bestanden",
+            filetypes=[("WireGuard", "*.conf *.zip"), ("Alle bestanden", "*")])
+        if not paths:
+            return
+        try:
+            n = core.import_vpn_configs(list(paths))
+        except Exception as e:  # noqa: BLE001
+            messagebox.showerror("VPN", f"Toevoegen mislukt: {e}")
+            return
+        self._refresh_proxy_count()
+        self.status.set(f"✔ {n} VPN-server(s) toegevoegd.")
 
     def _refresh_extensions(self):
         for w in self.ext_frame.winfo_children():
@@ -282,7 +337,7 @@ class App(tk.Tk):
             self.ident_list.insert("end", ident.describe())
 
     def _tick(self):
-        if self.mgr.reap():
+        if not getattr(self, "_busy", False) and self.mgr.reap():
             self._refresh_identities()
             self.status.set("Gesloten venster gewist.")
         self.after(1000, self._tick)

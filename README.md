@@ -9,7 +9,7 @@ Bij "Nieuwe identiteit" (of Ctrl+N) gebeurt dit binnen 1 à 2 seconden:
 
 1. Alle vensters sluiten.
 2. Cookies, cache, geschiedenis en logins worden gewist.
-3. Er start een vers venster, met een **ander IP** als je de proxylijst gebruikt.
+3. Er start een vers venster via een **andere VPN-server**, dus met een ander IP.
 
 Ook inbegrepen:
 
@@ -33,28 +33,50 @@ Ook inbegrepen:
 
 Heb je Python? Dan kan je ook gewoon `jornbrowser.pyw` dubbelklikken.
 
-## Van IP wisselen: twee manieren
+## Ingebouwde VPN: geen VPN-app nodig
 
-### A. Met je VPN-app (bv. VPN Unlimited)
-Tabblad *Netwerk*, kies "Geen proxy". Wissel in je VPN-app van server en klik
-daarna op **Nieuwe identiteit**. Het werkt, maar het kost telkens enkele seconden
-om de VPN opnieuw te verbinden.
+Jorn Browser heeft een ingebouwde VPN (WireGuard, via
+[wireproxy](https://github.com/whyvl/wireproxy)). Je hoeft je VPN-app niet te
+openen en er is geen installatie of adminrecht nodig. Elke identiteit krijgt
+haar **eigen VPN-server**:
 
-### B. Proxylijst: automatisch een ander IP per identiteit (aanrader)
-Tabblad *Netwerk*, kies "Proxylijst". Elke nieuwe identiteit pakt dan een
-andere proxy uit `data\proxies.txt`.
+- Elke "Nieuwe identiteit" geeft een andere server, dus een ander IP, binnen ongeveer 1 seconde.
+- Extra identiteiten draaien tegelijk, elk via een andere server.
+- **Alleen Jorn Browser** gaat door de VPN, de rest van je pc niet.
+- Valt de VPN weg, dan kan de browser nergens heen. Je echte IP lekt niet.
+- DNS-opvragingen gaan ook door de VPN.
 
-**Beste combinatie: Mullvad VPN (€5/maand)**
-1. Installeer Mullvad en verbind via WireGuard (bv. met een server in België of Nederland).
-2. Klik in Jorn Browser op **Mullvad-lijst ophalen**.
-3. Elke "Nieuwe identiteit" geeft nu meteen een ander uitgangs-IP, zonder dat
-   je de VPN opnieuw verbindt. De SOCKS5-proxies van Mullvad werken alleen
-   terwijl je met Mullvad verbonden bent, dus je verkeer blijft versleuteld.
+Werkt een server niet, dan probeert Jorn Browser automatisch de volgende.
 
-Andere proxies kan je met de hand in `proxies.txt` zetten (`socks5://host:poort`).
-Chromium ondersteunt geen proxies met gebruikersnaam/wachtwoord.
+### Je VPN-servers toevoegen (eenmalig)
 
-Klik op **Toon mijn IP** om te controleren welk IP een website ziet.
+Je hebt per server één **WireGuard-bestand** (`.conf`) nodig van je VPN-dienst.
+
+**VPN Unlimited (KeepSolid):**
+1. Log in op je account op de website van VPN Unlimited (KeepSolid User Office).
+2. Kies bij je VPN Unlimited-abonnement de optie **handmatige configuratie**
+   (*Manual configuration*).
+3. Kies het protocol **WireGuard** en een server (bv. België), maak de
+   configuratie aan en download het `.conf`-bestand.
+4. Herhaal dat voor een paar landen of servers.
+
+Niet elke VPN Unlimited-versie biedt WireGuard-bestanden aan. Zie je alleen
+OpenVPN of IKEv2, dan werkt het daar niet mee. Let ook op: elke configuratie
+kan een "apparaat" van je abonnement kosten.
+
+**Mullvad / ProtonVPN:** op hun website maak je in een paar klikken
+WireGuard-bestanden aan, voor veel servers tegelijk (als .zip).
+
+Daarna in Jorn Browser: ga naar het tabblad **Netwerk**, kies **Ingebouwde VPN**,
+klik op **VPN-bestanden toevoegen…** en selecteer je `.conf`-bestanden (of de `.zip`).
+De bestandsnaam wordt de naam van de server, bv. `Belgie.conf`.
+
+Je privésleutels blijven alleen op je eigen pc, in `data\vpn\`. Deel die map niet.
+
+### Andere manieren
+- **Proxylijst** (`proxies.txt`): eigen SOCKS5/HTTP-proxies, of klik op
+  "Mullvad-lijst ophalen" terwijl de Mullvad-app verbonden is.
+- **Geen:** een aparte VPN-app op je pc bepaalt het IP.
 
 ## Eerlijk over privacy
 
@@ -69,5 +91,5 @@ Klik op **Toon mijn IP** om te controleren welk IP een website ziet.
 
 | Wat | Waar |
 |---|---|
-| Instellingen, `proxies.txt`, extensies | `data\` naast JornBrowser.exe |
+| Instellingen, VPN-bestanden, `proxies.txt`, extensies | `data\` naast JornBrowser.exe |
 | Tijdelijke profielen (worden gewist) | `%TEMP%\JornBrowser\profiles` |

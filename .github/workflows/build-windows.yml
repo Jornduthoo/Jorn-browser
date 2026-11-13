@@ -4,6 +4,10 @@ on:
   push:
   workflow_dispatch:
 
+env:
+  WIREPROXY_VERSION: v1.0.9
+  WIREPROXY_SHA256: f6697154a176a52a7544bd31e2d8d4b328e37c0cedcdff547c0f7c5b5f5545b7
+
 jobs:
   build:
     runs-on: windows-latest
@@ -12,10 +16,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: wireproxy ophalen (ingebouwde VPN)
+        shell: bash
+        run: |
+          curl -sSL -o wp.tgz "https://github.com/whyvl/wireproxy/releases/download/${WIREPROXY_VERSION}/wireproxy_windows_amd64.tar.gz"
+          echo "${WIREPROXY_SHA256}  wp.tgz" | sha256sum -c -
+          tar xzf wp.tgz wireproxy.exe
+          ./wireproxy.exe --version
       - name: PyInstaller installeren
         run: pip install pyinstaller==6.11.1
       - name: Bouwen
-        run: pyinstaller --noconfirm --onefile --windowed --name JornBrowser jornbrowser.pyw
+        run: pyinstaller --noconfirm --onefile --windowed --name JornBrowser --add-binary "wireproxy.exe;." jornbrowser.pyw
       - name: Snelle controle (import)
         run: python -c "import jornbrowser.app, jornbrowser.core; print('ok')"
       - uses: actions/upload-artifact@v4
