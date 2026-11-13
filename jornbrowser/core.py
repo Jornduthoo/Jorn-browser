@@ -90,9 +90,10 @@ DEFAULT_CONFIG = {
     "devtools_allow_paste": True,
     # Venster bij het openen: "normal", "maximized" of "fullscreen" (F11)
     "window_mode": "maximized",
-    # VPN: servers met een hoge reactietijd overslaan en een snellere nemen
+    # VPN: bij het OPENEN van een venster servers met een hoge reactietijd
+    # overslaan. Een lopende verbinding wordt nooit gewisseld of verbroken.
     "skip_slow_servers": True,
-    "max_latency_ms": 300,
+    "max_latency_ms": 500,
 }
 
 WINDOW_MODES = {"Normaal venster": "normal", "Gemaximaliseerd": "maximized",
@@ -150,6 +151,11 @@ def load_config() -> dict:
         if cfg.get("window_mode") == "fullscreen":
             cfg["window_mode"] = "maximized"
         cfg["config_version"] = 3
+    if cfg.get("config_version", 1) < 4:
+        # v4: grens voor trage servers ruimer (alleen echt trage overslaan)
+        if cfg.get("max_latency_ms") == 300:
+            cfg["max_latency_ms"] = 500
+        cfg["config_version"] = 4
     return cfg
 
 
@@ -1199,7 +1205,7 @@ class IdentityManager:
             except ConnectionError:
                 record_speed(preferred.stem, None)
         skip_slow = self.cfg.get("skip_slow_servers", True)
-        max_ms = int(self.cfg.get("max_latency_ms", 300))
+        max_ms = int(self.cfg.get("max_latency_ms", 500))
         speeds = load_speeds()
         pool = [c for c in free if str(c) not in tried]
         if skip_slow:

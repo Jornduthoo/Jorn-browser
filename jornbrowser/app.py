@@ -293,14 +293,15 @@ class App(tk.Tk):
         self.skip_slow = tk.BooleanVar(value=self.cfg.get("skip_slow_servers", True))
         ttk.Checkbutton(srow, text="Trage servers overslaan: trager dan", variable=self.skip_slow,
                         command=self._save_net).pack(side="left")
-        self.max_latency = tk.StringVar(value=str(self.cfg.get("max_latency_ms", 300)))
+        self.max_latency = tk.StringVar(value=str(self.cfg.get("max_latency_ms", 500)))
         lat = ttk.Spinbox(srow, from_=50, to=2000, increment=50, width=6, textvariable=self.max_latency,
                           command=self._save_net)
         lat.pack(side="left", padx=(6, 4))
         lat.bind("<FocusOut>", lambda e: self._save_net())
         lat.bind("<Return>", lambda e: self._save_net())
         ttk.Label(srow, text="ms", style="Card.TLabel").pack(side="left")
-        ttk.Label(c3, text="Reactietijd van elke server wordt gemeten en 12 uur onthouden. Een bewaarde "
+        ttk.Label(c3, text="Alleen bij het openen van een venster: een lopende verbinding wordt nooit "
+                           "gewisseld of verbroken. Metingen worden 12 uur onthouden. Een bewaarde "
                            "identiteit houdt altijd haar eigen server.",
                   style="CardMuted.TLabel", wraplength=520).pack(anchor="w", pady=(2, 0))
         self.webrtc = tk.BooleanVar(value=self.cfg["block_webrtc_leak"])

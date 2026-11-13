@@ -99,9 +99,11 @@ haar **eigen VPN-server**:
 
 Werkt een server niet, dan probeert Jorn Browser automatisch de volgende.
 **Trage servers worden overgeslagen**: bij elke verbinding meet Jorn Browser de
-reactietijd. Is een server trager dan 300 ms (instelbaar in het tabblad *Netwerk*),
+reactietijd. Is een server trager dan 500 ms (instelbaar in het tabblad *Netwerk*),
 dan neemt hij een andere en onthoudt hij dat 12 uur lang. Je ziet de gemeten tijd
-achter de servernaam, bv. "VPN Belgie (35 ms)".
+achter de servernaam, bv. "VPN Belgie (35 ms)". Dit gebeurt alleen bij het **openen**
+van een venster: een lopende verbinding (bv. tijdens een geautomatiseerde taak) wordt
+nooit gewisseld of verbroken. Aan/uit via het vinkje in het tabblad *Netwerk*.
 
 ### Je VPN-servers toevoegen (eenmalig)
 
