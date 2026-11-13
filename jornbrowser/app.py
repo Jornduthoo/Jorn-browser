@@ -385,6 +385,21 @@ class App(tk.Tk):
             core.save_config(self.cfg)
         ttk.Checkbutton(c, text="Bij het opstarten op updates controleren", variable=self.auto_update,
                         command=on_auto).pack(anchor="w", pady=(8, 0))
+        wrow = ttk.Frame(c, style="Card.TFrame")
+        wrow.pack(anchor="w", pady=(8, 0))
+        ttk.Label(wrow, text="Venster bij openen:", style="Card.TLabel").pack(side="left")
+        names = {v: k for k, v in core.WINDOW_MODES.items()}
+        self.window_mode = tk.StringVar(value=names.get(self.cfg.get("window_mode", "fullscreen"),
+                                                        "Volledig scherm (F11)"))
+        wbox = ttk.Combobox(wrow, textvariable=self.window_mode, state="readonly", width=24,
+                            values=list(core.WINDOW_MODES))
+        wbox.pack(side="left", padx=(8, 0))
+
+        def on_window(_e=None):
+            self.cfg["window_mode"] = core.WINDOW_MODES[self.window_mode.get()]
+            core.save_config(self.cfg)
+            self.status.set("✔ Geldt vanaf de volgende identiteit. (Volledig scherm verlaten: F11)")
+        wbox.bind("<<ComboboxSelected>>", on_window)
         self.allow_paste = tk.BooleanVar(value=self.cfg.get("devtools_allow_paste", True))
 
         def on_paste():

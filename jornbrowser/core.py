@@ -88,7 +88,12 @@ DEFAULT_CONFIG = {
     "auto_update_check": True,
     # Plakken in de DevTools-console zonder eerst "allow pasting" te typen
     "devtools_allow_paste": True,
+    # Venster bij het openen: "normal", "maximized" of "fullscreen" (F11)
+    "window_mode": "fullscreen",
 }
+
+WINDOW_MODES = {"Normaal venster": "normal", "Gemaximaliseerd": "maximized",
+                "Volledig scherm (F11)": "fullscreen"}
 
 
 # Zoekmachines die met een VPN (bijna) nooit captchas tonen.
@@ -871,6 +876,11 @@ def build_args(chromium: Path, profile: Path, proxy: Proxy | None,
         args.append(f"--proxy-server={proxy.url}")
         # Lokale adressen niet via de proxy; DNS gaat bij socks5 via de proxy.
         args.append("--proxy-bypass-list=<-loopback>")
+    mode = cfg.get("window_mode", "fullscreen")
+    if mode == "fullscreen":
+        args.append("--start-fullscreen")
+    elif mode == "maximized":
+        args.append("--start-maximized")
     if cfg.get("devtools_allow_paste", True):
         args.append("--unsafely-disable-devtools-self-xss-warnings")
     if cfg.get("block_webrtc_leak", True):
