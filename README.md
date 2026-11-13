@@ -72,6 +72,16 @@ door de tijdelijke. De bladwijzerbalk staat altijd aan.
 - Heb je twee vensters tegelijk open, dan worden nieuwe bladwijzers van beide samengevoegd.
 - Ook **vastgezette extensies** (het punaise-icoon in de werkbalk) blijven vastgezet in elke nieuwe identiteit.
 
+## ⚙ Extensies instellen (sjabloon)
+
+Extensies (weergave, thema, klas- en presentatietools) stel je één keer in:
+1. Tabblad **Extensies**, dan **⚙ Extensies instellen**. Er opent een apart venster.
+2. Stel daar je extensies in zoals je ze wilt en sluit het venster.
+3. Elke nieuwe identiteit start voortaan met die instellingen.
+
+Wat je in een gewone identiteit aan een extensie verandert, wordt bij
+"Nieuwe identiteit" gewist. Wil je iets blijvend aanpassen, doe het in het sjabloon.
+
 ## Ingebouwde VPN: geen VPN-app nodig
 
 Jorn Browser heeft een ingebouwde VPN (WireGuard, via

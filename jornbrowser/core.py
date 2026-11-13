@@ -763,6 +763,40 @@ def _merge_bookmarks(master: dict, mine: dict) -> bytes:
     return json.dumps(master, indent=3).encode("utf-8")
 
 
+# Sjabloon voor extensie-instellingen: één vast profiel waarin je je extensies
+# instelt. Nieuwe tijdelijke identiteiten starten met een KOPIE van die
+# instellingen; wijzigingen in een tijdelijke identiteit gaan niet terug naar
+# het sjabloon (elke identiteit begint dus opnieuw vanuit het sjabloon).
+
+TEMPLATE_STATE_DIRS = ("Local Extension Settings", "Sync Extension Settings")
+
+
+def template_identity() -> "SavedIdentity":
+    d = data_dir() / "template"
+    d.mkdir(parents=True, exist_ok=True)
+    return SavedIdentity("Extensies instellen", d)
+
+
+def apply_template(profile: Path) -> int:
+    """Kopieer de extensie-instellingen van het sjabloon naar een nieuw profiel."""
+    src = template_identity().profile / "Default"
+    dst = profile / "Default"
+    n = 0
+    for name in TEMPLATE_STATE_DIRS:
+        if (src / name).is_dir():
+            shutil.copytree(src / name, dst / name, dirs_exist_ok=True,
+                            ignore=shutil.ignore_patterns("LOCK"))
+            n += 1
+    idb = src / "IndexedDB"
+    if idb.is_dir():
+        for d in idb.iterdir():
+            if d.name.startswith("chrome-extension_"):
+                shutil.copytree(d, dst / "IndexedDB" / d.name, dirs_exist_ok=True,
+                                ignore=shutil.ignore_patterns("LOCK"))
+                n += 1
+    return n
+
+
 # --------------------------------------------------------------------------- identiteiten
 
 def build_args(chromium: Path, profile: Path, proxy: Proxy | None,
@@ -979,6 +1013,16 @@ class IdentityManager:
             bm_digest = seed_profile(profile)
         except OSError:
             bm_digest = ""
+        if not saved:  # alleen tijdelijke identiteiten starten vanuit het sjabloon
+            template_open = any(i.saved and i.saved.path == template_identity().path
+                                for i in self.identities)
+            if template_open:
+                log("sjabloon is open: nieuwe identiteit start zonder extensie-instellingen")
+            else:
+                try:
+                    log(f"sjabloon toegepast: {apply_template(profile)} onderdelen")
+                except OSError as e:
+                    log(f"sjabloon toepassen mislukt: {e}")
         exts = [e.path for e in list_extensions() if e.enabled]
         search_ext = search_extension(self.cfg)
         if search_ext:
@@ -1130,6 +1174,10 @@ class IdentityManager:
 
     def open_saved(self, si: SavedIdentity) -> Identity:
         return self.spawn(saved=si)
+
+    def open_template(self) -> Identity:
+        """Open het sjabloon om extensies in te stellen."""
+        return self.spawn(url="chrome://extensions/", saved=template_identity())
 
     def reap(self) -> list[Identity]:
         """Ruim identiteiten op waarvan de gebruiker het venster zelf sloot."""

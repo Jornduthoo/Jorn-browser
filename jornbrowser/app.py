@@ -305,6 +305,17 @@ class App(tk.Tk):
         entry.bind("<Return>", lambda e: self.add_extension())
         ttk.Button(row, text="＋ Toevoegen", command=self.add_extension).pack(side="left", padx=(8, 0))
 
+        ct = T.card(f)
+        ct.outer.pack(fill="x", pady=(12, 0))
+        trow = ttk.Frame(ct, style="Card.TFrame")
+        trow.pack(fill="x")
+        ttk.Label(trow, text="Instellingen van extensies", style="CardTitle.TLabel").pack(side="left")
+        ttk.Button(trow, text="⚙ Extensies instellen", command=self.open_template).pack(side="right")
+        ttk.Label(ct, text="Stel je extensies hier één keer in (thema, weergave, tools). Elke nieuwe "
+                           "identiteit start met die instellingen. Wijzigingen in een gewone identiteit "
+                           "worden niet onthouden: pas ze hier aan.",
+                  style="CardMuted.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
+
         c2 = T.card(f)
         c2.outer.pack(fill="both", expand=True, pady=(12, 0))
         top = ttk.Frame(c2, style="Card.TFrame")
@@ -522,6 +533,11 @@ class App(tk.Tk):
         open_paths = {i.saved.path for i in self.mgr.identities if i.saved}
         for si in core.list_saved_identities():
             self.saved_list.insert("end", ("●  " if si.path in open_paths else "    ") + si.describe())
+
+    def open_template(self):
+        self._run_bg(self.mgr.open_template,
+                     lambda i: "⚙ Stel je extensies in en sluit dan het venster. Nieuwe identiteiten "
+                               "starten met deze instellingen.", "Sjabloon openen…")
 
     def close_all(self):
         self._run(self.mgr.close_all, "Alle identiteiten gesloten en gewist.")
