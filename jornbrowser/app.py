@@ -13,9 +13,11 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 try:
     from . import core
     from . import theme as T
+    from . import updater
 except ImportError:  # gestart als los script / PyInstaller
     import core  # type: ignore
     import theme as T  # type: ignore
+    import updater  # type: ignore
 
 
 def open_path(path) -> None:
@@ -48,8 +50,11 @@ class App(tk.Tk):
         self.mgr = core.IdentityManager(self.cfg)
         self.status = tk.StringVar(value="Klaar. Klik op Nieuwe identiteit om te starten.")
 
+        updater.cleanup_after_update()
         self._build_header()
+        self.update_bar = tk.Frame(self, bg=T.ACCENT_MID)  # verschijnt alleen bij een update
         nb = ttk.Notebook(self)
+        self.nb = nb
         nb.pack(fill="both", expand=True, padx=14, pady=(4, 0))
         nb.add(self._build_main(nb), text="  Identiteit  ")
         nb.add(self._build_network(nb), text="  Netwerk  ")
@@ -57,9 +62,15 @@ class App(tk.Tk):
         nb.add(self._build_settings(nb), text="  Instellingen  ")
 
         bar = tk.Frame(self, bg=T.PANEL, height=34)
-        bar.pack(fill="x", side="bottom")
+        bar.pack(fill="x", side="bottom", before=nb)  # eerst inpakken: blijft altijd zichtbaar
+        upd = tk.Label(bar, text="Updates zoeken", bg=T.PANEL, fg=T.ACCENT2, cursor="hand2",
+                       font=self.F["small"], padx=10)
+        upd.pack(side="right")
+        upd.bind("<Button-1>", lambda e: self.check_updates(manual=True))
+        tk.Label(bar, text=f"v{updater.current_version()}", bg=T.PANEL, fg=T.MUTED,
+                 font=self.F["small"]).pack(side="right")
         tk.Label(bar, textvariable=self.status, bg=T.PANEL, fg=T.MUTED, anchor="w",
-                 font=self.F["small"], padx=14, pady=8).pack(fill="x")
+                 font=self.F["small"], padx=14, pady=8).pack(side="left", fill="x", expand=True)
 
         self.bind_all("<Control-n>", lambda e: self.new_identity())
         self.bind_all("<Control-N>", lambda e: self.new_identity())
@@ -71,6 +82,86 @@ class App(tk.Tk):
 
         if not core.find_chromium(self.cfg):
             self.after(300, self._warn_no_chromium)
+        if self.cfg.get("auto_update_check", True):
+            self.after(2500, lambda: self.check_updates(manual=False))
+
+    # ------------------------------------------------------------------ updates
+
+    def check_updates(self, manual: bool):
+        if manual:
+            self.status.set("Zoeken naar updates…")
+
+        def work():
+            try:
+                info = updater.check_latest()
+                self.after(0, lambda: self._update_result(info, None, manual))
+            except Exception as e:  # noqa: BLE001
+                err = str(e)
+                self.after(0, lambda: self._update_result(None, err, manual))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _update_result(self, info, err, manual):
+        if err:
+            if manual:
+                self.status.set("Updates zoeken mislukt: " + err)
+            return
+        if not info:
+            if manual:
+                self.status.set(f"✔ Je hebt de nieuwste versie (v{updater.current_version()}).")
+            return
+        self._show_update_bar(info)
+
+    def _show_update_bar(self, info):
+        b = self.update_bar
+        for w in b.winfo_children():
+            w.destroy()
+        tk.Label(b, text=f"  ★  Nieuwe versie {info['version']} beschikbaar", bg=T.ACCENT_MID, fg="#ffffff",
+                 font=self.F["bold"], pady=8).pack(side="left")
+        self.update_btn = tk.Label(b, text="  Nu bijwerken  ", bg="#ffffff", fg=T.ACCENT_MID,
+                                   font=self.F["bold"], cursor="hand2", padx=6, pady=3)
+        self.update_btn.pack(side="right", padx=10)
+        self.update_btn.bind("<Button-1>", lambda e: self.install_update(info))
+        later = tk.Label(b, text="Later", bg=T.ACCENT_MID, fg="#e0e3ff", font=self.F["small"], cursor="hand2")
+        later.pack(side="right")
+        later.bind("<Button-1>", lambda e: b.pack_forget())
+        b.pack(fill="x", padx=14, pady=(0, 4), before=self.nb)
+
+    def install_update(self, info):
+        if not updater.is_installed_exe():
+            messagebox.showinfo("Update", "Bijwerken kan alleen in JornBrowser.exe (niet vanuit de broncode).\n"
+                                          "Haal de nieuwe versie van GitHub.")
+            return
+        if self.mgr.identities and not messagebox.askyesno(
+                "Update", "Jorn Browser herstart na de update. Open vensters worden gesloten "
+                          "(bewaarde identiteiten blijven bewaard). Doorgaan?"):
+            return
+        self.update_btn.unbind("<Button-1>")
+
+        def progress(frac):
+            self.after(0, lambda: self.update_btn.configure(text=f"  Downloaden… {int(frac * 100)}%  "))
+
+        def work():
+            try:
+                new_exe = updater.download(info, progress)
+                self.after(0, lambda: self._finish_update(new_exe))
+            except Exception as e:  # noqa: BLE001
+                err = str(e)
+                self.after(0, lambda: (messagebox.showerror("Update", f"Update mislukt: {err}"),
+                                       self._show_update_bar(info)))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _finish_update(self, new_exe):
+        self.update_btn.configure(text="  Herstarten…  ")
+        self.update_idletasks()
+        try:
+            self.mgr.close_all()
+            updater.install_and_restart(new_exe)
+        except OSError as e:
+            messagebox.showerror("Update", f"Kon de update niet installeren: {e}")
+            return
+        self.destroy()
 
     def _set_icon(self):
         try:
@@ -231,7 +322,9 @@ class App(tk.Tk):
         return f
 
     def _build_settings(self, parent):
-        f = ttk.Frame(parent, padding=(4, 14, 4, 10))
+        sf = T.ScrollFrame(parent)
+        f = ttk.Frame(sf.inner, padding=(4, 14, 8, 10))
+        f.pack(fill="both", expand=True)
 
         m = T.card(f)
         m.outer.pack(fill="x", pady=(0, 12))
@@ -248,15 +341,15 @@ class App(tk.Tk):
         self.mullvad_show.pack(side="left", padx=(8, 0))
         row2 = ttk.Frame(m, style="Card.TFrame")
         row2.pack(fill="x", pady=(8, 0))
-        ttk.Button(row2, text="Opslaan", command=self.save_mullvad).pack(side="left")
-        ttk.Button(row2, text="Kopiëren", command=self.copy_mullvad).pack(side="left", padx=6)
-        ttk.Button(row2, text="Vergeten", style="Danger.TButton", command=self.forget_mullvad).pack(side="left")
+        ttk.Button(row2, text="Opslaan", style="Small.TButton", command=self.save_mullvad).pack(side="left")
+        ttk.Button(row2, text="Kopiëren", style="Small.TButton", command=self.copy_mullvad).pack(side="left", padx=4)
+        ttk.Button(row2, text="Vergeten", style="SmallDanger.TButton", command=self.forget_mullvad).pack(side="left")
         row3 = ttk.Frame(m, style="Card.TFrame")
-        row3.pack(fill="x", pady=(8, 0))
-        ttk.Button(row3, text="Mijn account ↗",
+        row3.pack(fill="x", pady=(6, 0))
+        ttk.Button(row3, text="Mijn account ↗", style="Small.TButton",
                    command=lambda: webbrowser.open(core.MULLVAD_ACCOUNT_URL)).pack(side="left")
-        ttk.Button(row3, text="WireGuard-bestanden maken ↗",
-                   command=lambda: webbrowser.open(core.MULLVAD_WG_CONFIG_URL)).pack(side="left", padx=6)
+        ttk.Button(row3, text="WireGuard-bestanden maken ↗", style="Small.TButton",
+                   command=lambda: webbrowser.open(core.MULLVAD_WG_CONFIG_URL)).pack(side="left", padx=4)
 
         c = T.card(f)
         c.outer.pack(fill="x")
@@ -268,6 +361,23 @@ class App(tk.Tk):
         ttk.Entry(row, textvariable=self.chromium_path).pack(side="left", fill="x", expand=True)
         ttk.Button(row, text="Kiezen…", command=self.pick_chromium).pack(side="left", padx=(8, 0))
         ttk.Button(row, text="Datamap", command=lambda: open_path(core.data_dir())).pack(side="left", padx=(6, 0))
+        self.auto_update = tk.BooleanVar(value=self.cfg.get("auto_update_check", True))
+
+        def on_auto():
+            self.cfg["auto_update_check"] = bool(self.auto_update.get())
+            core.save_config(self.cfg)
+        ttk.Checkbutton(c, text="Bij het opstarten op updates controleren", variable=self.auto_update,
+                        command=on_auto).pack(anchor="w", pady=(8, 0))
+        self.allow_paste = tk.BooleanVar(value=self.cfg.get("devtools_allow_paste", True))
+
+        def on_paste():
+            self.cfg["devtools_allow_paste"] = bool(self.allow_paste.get())
+            core.save_config(self.cfg)
+            self.status.set("✔ Geldt vanaf de volgende identiteit.")
+        ttk.Checkbutton(c, text="Plakken in de DevTools-console altijd toestaan (geen \"allow pasting\")",
+                        variable=self.allow_paste, command=on_paste).pack(anchor="w", pady=(4, 0))
+        ttk.Label(c, text="Plak nooit code die een onbekende je stuurt: zo stelen oplichters accounts.",
+                  style="CardMuted.TLabel").pack(anchor="w", padx=(26, 0))
 
         c2 = T.card(f)
         c2.outer.pack(fill="x", pady=(12, 0))
@@ -308,7 +418,7 @@ class App(tk.Tk):
             core.save_config(self.cfg)
             self.status.set(f"✔ Adresbalk zoekt via {choice} vanaf de volgende identiteit.")
         scombo.bind("<<ComboboxSelected>>", on_search)
-        return f
+        return sf
 
     # ------------------------------------------------------------------ acties
 

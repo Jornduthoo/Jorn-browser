@@ -97,6 +97,8 @@ def apply(root: tk.Tk) -> dict:
           bordercolor=[("active", ACCENT_MID)],
           lightcolor=[("active", "#252a46")], darkcolor=[("active", "#252a46")])
     s.configure("Danger.TButton", foreground=DANGER)
+    s.configure("Small.TButton", padding=(8, 6))
+    s.configure("SmallDanger.TButton", padding=(8, 6), foreground=DANGER)
     s.configure("Ghost.TButton", background=PANEL, lightcolor=PANEL, darkcolor=PANEL)
 
     s.configure("TNotebook", background=BG, borderwidth=0, bordercolor=BG, lightcolor=BG,
@@ -133,7 +135,7 @@ def apply(root: tk.Tk) -> dict:
     return fonts
 
 
-def card(parent, padding=16) -> ttk.Frame:
+def card(parent, padding=14) -> ttk.Frame:
     """Een paneel met lichtere achtergrond en een dun randje."""
     outer = tk.Frame(parent, bg=BORDER, highlightthickness=0)
     inner = ttk.Frame(outer, style="Card.TFrame", padding=padding)
@@ -242,3 +244,34 @@ class Pill(tk.Canvas):
         self.create_rectangle(r, 0, w - r, h, fill=fill, outline=fill)
         self.create_oval(12, r - 4, 20, r + 4, fill=color, outline=color)
         self.create_text(28, r, text=text, fill=TEXT, font=self.font, anchor="w")
+
+
+class ScrollFrame(ttk.Frame):
+    """Frame met verticale scrollbalk (verschijnt alleen als het nodig is)."""
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.canvas = tk.Canvas(self, bg=BG, highlightthickness=0, bd=0)
+        self.vsb = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.inner = ttk.Frame(self.canvas)
+        self._win = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.vsb.set)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.inner.bind("<Configure>", lambda e: self._update())
+        self.canvas.bind("<Configure>", lambda e: (self.canvas.itemconfigure(self._win, width=e.width),
+                                                   self._update()))
+        self.canvas.bind("<Enter>", lambda e: self.canvas.bind_all("<MouseWheel>", self._wheel))
+        self.canvas.bind("<Leave>", lambda e: self.canvas.unbind_all("<MouseWheel>"))
+
+    def _update(self):
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        need = self.inner.winfo_reqheight() > self.canvas.winfo_height() > 1
+        if need and not self.vsb.winfo_ismapped():
+            self.vsb.pack(side="right", fill="y")
+        elif not need and self.vsb.winfo_ismapped():
+            self.vsb.pack_forget()
+            self.canvas.yview_moveto(0)
+
+    def _wheel(self, e):
+        if self.vsb.winfo_ismapped():
+            self.canvas.yview_scroll(int(-e.delta / 120) or (-1 if e.delta > 0 else 1), "units")

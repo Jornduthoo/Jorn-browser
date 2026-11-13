@@ -32,9 +32,18 @@ Ook inbegrepen:
    (gewone Google Chrome werkt niet: die laadt geen extensies via de app).
 2. **JornBrowser.exe downloaden**: GitHub, tabblad *Actions*, laatste geslaagde
    build "Windows .exe bouwen", onderaan *Artifacts*, dan `JornBrowser-windows`.
+   Of makkelijker: neem `JornBrowser.exe` van de pagina
+   [Releases](https://github.com/Jornduthoo/Jorn-browser/releases/latest).
    Zet het bestand in een eigen map, bv. `C:\JornBrowser\`.
 3. Dubbelklik. Windows SmartScreen kan waarschuwen omdat de exe niet
    ondertekend is: kies *Meer info*, dan *Toch uitvoeren*.
+
+**Updates:** daarna hoef je niets meer te downloaden. Is er een nieuwe versie,
+dan verschijnt bovenaan in de app een balk **Nu bijwerken**. Eén klik en de app
+downloadt de update, controleert de checksum en herstart. Je instellingen blijven
+staan. Onderaan rechts staat je versienummer en de knop *Updates zoeken*.
+(Uitzetten kan in *Instellingen*. Het controleren gebeurt rechtstreeks bij GitHub,
+dus buiten de VPN om.)
 
 Heb je Python? Dan kan je ook gewoon `jornbrowser.pyw` dubbelklikken.
 

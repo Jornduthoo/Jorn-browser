@@ -4,6 +4,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write   # nodig om een Release (update) te publiceren
+
 env:
   WIREPROXY_VERSION: v1.0.9
   WIREPROXY_SHA256: f6697154a176a52a7544bd31e2d8d4b328e37c0cedcdff547c0f7c5b5f5545b7
@@ -23,13 +26,28 @@ jobs:
           echo "${WIREPROXY_SHA256}  wp.tgz" | sha256sum -c -
           tar xzf wp.tgz wireproxy.exe
           ./wireproxy.exe --version
+      - name: Versienummer instellen
+        shell: bash
+        run: echo "VERSION = \"1.0.${{ github.run_number }}\"" > jornbrowser/_version.py && cat jornbrowser/_version.py
       - name: PyInstaller installeren
         run: pip install pyinstaller==6.11.1
       - name: Bouwen
         run: pyinstaller --noconfirm --onefile --windowed --name JornBrowser --add-binary "wireproxy.exe;." --add-data "assets;assets" --icon assets/icon.ico jornbrowser.pyw
       - name: Snelle controle (import)
-        run: python -c "import jornbrowser.app, jornbrowser.core, jornbrowser.theme; print('ok')"
+        run: python -c "import jornbrowser.app, jornbrowser.core, jornbrowser.theme, jornbrowser.updater; print('ok')"
       - uses: actions/upload-artifact@v4
         with:
           name: JornBrowser-windows
           path: dist/JornBrowser.exe
+      - name: Release publiceren (de app haalt hier updates)
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          printf '%s\n' "$COMMIT_MSG" | grep -v -e '^Co-Authored-By:' -e '^Claude-Session:' > notes.txt
+          gh release create "v1.0.${{ github.run_number }}" dist/JornBrowser.exe \
+            --target "${{ github.sha }}" \
+            --title "Jorn Browser 1.0.${{ github.run_number }}" \
+            --notes-file notes.txt --latest

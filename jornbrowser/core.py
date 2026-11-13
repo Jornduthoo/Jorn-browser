@@ -68,6 +68,10 @@ DEFAULT_CONFIG = {
     "block_webrtc_leak": True,
     # Zoekmachine voor de adresbalk (via een ingebouwde extensie, zoals Tor Browser)
     "search_engine": "DuckDuckGo",
+    # Bij het opstarten kijken of er een nieuwe versie op GitHub staat
+    "auto_update_check": True,
+    # Plakken in de DevTools-console zonder eerst "allow pasting" te typen
+    "devtools_allow_paste": True,
 }
 
 
@@ -705,6 +709,8 @@ def build_args(chromium: Path, profile: Path, proxy: Proxy | None,
         args.append(f"--proxy-server={proxy.url}")
         # Lokale adressen niet via de proxy; DNS gaat bij socks5 via de proxy.
         args.append("--proxy-bypass-list=<-loopback>")
+    if cfg.get("devtools_allow_paste", True):
+        args.append("--unsafely-disable-devtools-self-xss-warnings")
     if cfg.get("block_webrtc_leak", True):
         # Voorkomt dat WebRTC je echte IP lekt buiten de proxy/VPN om.
         args.append("--force-webrtc-ip-handling-policy=disable_non_proxied_udp")
