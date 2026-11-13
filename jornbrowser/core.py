@@ -66,6 +66,8 @@ DEFAULT_CONFIG = {
     "start_url": "https://duckduckgo.com/",
     "check_url": "https://am.i.mullvad.net/",
     "block_webrtc_leak": True,
+    # Zoekmachine voor de adresbalk (via een ingebouwde extensie, zoals Tor Browser)
+    "search_engine": "DuckDuckGo",
 }
 
 
@@ -75,6 +77,28 @@ START_PAGES = {
     "Startpage (Google-resultaten, privé)": "https://www.startpage.com/",
     "Brave Search": "https://search.brave.com/",
     "Leeg (about:blank)": "about:blank",
+}
+
+
+# Zoekmachine in de adresbalk. "Google" = Chromium-standaard (geen override).
+SEARCH_ENGINES = {
+    "DuckDuckGo": {
+        "keyword": "ddg",
+        "search_url": "https://duckduckgo.com/?q={searchTerms}",
+        "suggest_url": "https://duckduckgo.com/ac/?q={searchTerms}&type=list",
+        "favicon_url": "https://duckduckgo.com/favicon.ico",
+    },
+    "Startpage": {
+        "keyword": "sp",
+        "search_url": "https://www.startpage.com/sp/search?query={searchTerms}",
+        "favicon_url": "https://www.startpage.com/favicon.ico",
+    },
+    "Brave Search": {
+        "keyword": "brave",
+        "search_url": "https://search.brave.com/search?q={searchTerms}",
+        "favicon_url": "https://search.brave.com/favicon.ico",
+    },
+    "Google": None,
 }
 
 
@@ -514,6 +538,39 @@ class VpnTunnel:
         (self.workdir / "tunnel.conf").unlink(missing_ok=True)
 
 
+# --------------------------------------------------------------------------- ingebouwde zoek-extensie
+
+def builtin_dir() -> Path:
+    d = data_dir() / "builtin"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def search_extension(cfg: dict) -> Path | None:
+    """Maakt (of werkt bij) een mini-extensie die de zoekmachine van de adresbalk
+    instelt. Geeft None bij "Google" (dan blijft Chromium standaard)."""
+    name = cfg.get("search_engine", "DuckDuckGo")
+    engine = SEARCH_ENGINES.get(name)
+    target = builtin_dir() / "search"
+    if not engine:
+        shutil.rmtree(target, ignore_errors=True)
+        return None
+    provider = {"name": name, "encoding": "UTF-8", "is_default": True, **engine}
+    manifest = {
+        "manifest_version": 3,
+        "name": f"Jorn Browser: zoeken via {name}",
+        "version": "1.0",
+        "description": "Laat de adresbalk zoeken via een privacyvriendelijke zoekmachine.",
+        "chrome_settings_overrides": {"search_provider": provider},
+    }
+    text = json.dumps(manifest, indent=2)
+    target.mkdir(parents=True, exist_ok=True)
+    mf = target / "manifest.json"
+    if not mf.exists() or mf.read_text(encoding="utf-8") != text:
+        mf.write_text(text, encoding="utf-8")
+    return target
+
+
 # --------------------------------------------------------------------------- identiteiten
 
 def build_args(chromium: Path, profile: Path, proxy: Proxy | None,
@@ -724,6 +781,9 @@ class IdentityManager:
                 cleanup()
                 raise ValueError("Proxy-modus staat aan, maar proxies.txt is leeg.")
         exts = [e.path for e in list_extensions() if e.enabled]
+        search_ext = search_extension(self.cfg)
+        if search_ext:
+            exts.append(search_ext)
         args = build_args(chromium, profile, proxy, exts, self.cfg)
         if url:
             args[-1] = url

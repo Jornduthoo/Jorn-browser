@@ -177,6 +177,12 @@ class App(tk.Tk):
         self.webrtc = tk.BooleanVar(value=self.cfg["block_webrtc_leak"])
         ttk.Checkbutton(c3, text="WebRTC-lek blokkeren  (verbergt je echte IP, aanbevolen)",
                         variable=self.webrtc, command=self._save_net).pack(anchor="w", pady=(8, 0))
+        ttk.Label(c3, text="IP-controlepagina  (voor ◎ Toon mijn IP)", style="Card.TLabel").pack(anchor="w", pady=(12, 0))
+        self.check_url = tk.StringVar(value=self.cfg["check_url"])
+        iprow = ttk.Frame(c3, style="Card.TFrame")
+        iprow.pack(fill="x", pady=(6, 0))
+        ttk.Entry(iprow, textvariable=self.check_url).pack(side="left", fill="x", expand=True)
+        ttk.Button(iprow, text="Opslaan", command=self._save_settings).pack(side="left", padx=(8, 0))
         self._refresh_proxy_count()
         return f
 
@@ -268,13 +274,26 @@ class App(tk.Tk):
                 self.start_url.set(url)
                 self._save_settings()
         combo.bind("<<ComboboxSelected>>", on_pick)
-        ttk.Entry(c2, textvariable=self.start_url).pack(fill="x", pady=(0, 10))
-        ttk.Label(c2, text="IP-controlepagina", style="CardTitle.TLabel").pack(anchor="w")
-        self.check_url = tk.StringVar(value=self.cfg["check_url"])
-        iprow = ttk.Frame(c2, style="Card.TFrame")
-        iprow.pack(fill="x", pady=(6, 0))
-        ttk.Entry(iprow, textvariable=self.check_url).pack(side="left", fill="x", expand=True)
-        ttk.Button(iprow, text="Opslaan", command=self._save_settings).pack(side="left", padx=(8, 0))
+        sentry = ttk.Entry(c2, textvariable=self.start_url)
+        sentry.pack(fill="x", pady=(0, 10))
+        sentry.bind("<Return>", lambda e: self._save_settings())
+        sentry.bind("<FocusOut>", lambda e: self._save_settings())
+
+        ttk.Label(c2, text="Zoeken in de adresbalk", style="CardTitle.TLabel").pack(anchor="w")
+        self.search_choice = tk.StringVar(value=self.cfg.get("search_engine", "DuckDuckGo"))
+        scombo = ttk.Combobox(c2, textvariable=self.search_choice, state="readonly",
+                              values=[n if n != "Google" else "Google (Chromium-standaard)"
+                                      for n in core.SEARCH_ENGINES])
+        if self.search_choice.get() == "Google":
+            self.search_choice.set("Google (Chromium-standaard)")
+        scombo.pack(fill="x", pady=(6, 10))
+
+        def on_search(_e=None):
+            choice = self.search_choice.get().split(" (")[0]
+            self.cfg["search_engine"] = choice
+            core.save_config(self.cfg)
+            self.status.set(f"✔ Adresbalk zoekt via {choice} vanaf de volgende identiteit.")
+        scombo.bind("<<ComboboxSelected>>", on_search)
         return f
 
     # ------------------------------------------------------------------ acties
