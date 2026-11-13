@@ -288,6 +288,21 @@ class App(tk.Tk):
                         command=self._save_net).pack(side="left", padx=(0, 10))
         ttk.Radiobutton(order, text="na elkaar", value="sequential", variable=self.proxy_order,
                         command=self._save_net).pack(side="left")
+        srow = ttk.Frame(c3, style="Card.TFrame")
+        srow.pack(anchor="w", pady=(8, 0))
+        self.skip_slow = tk.BooleanVar(value=self.cfg.get("skip_slow_servers", True))
+        ttk.Checkbutton(srow, text="Trage servers overslaan: trager dan", variable=self.skip_slow,
+                        command=self._save_net).pack(side="left")
+        self.max_latency = tk.StringVar(value=str(self.cfg.get("max_latency_ms", 300)))
+        lat = ttk.Spinbox(srow, from_=50, to=2000, increment=50, width=6, textvariable=self.max_latency,
+                          command=self._save_net)
+        lat.pack(side="left", padx=(6, 4))
+        lat.bind("<FocusOut>", lambda e: self._save_net())
+        lat.bind("<Return>", lambda e: self._save_net())
+        ttk.Label(srow, text="ms", style="Card.TLabel").pack(side="left")
+        ttk.Label(c3, text="Reactietijd van elke server wordt gemeten en 12 uur onthouden. Een bewaarde "
+                           "identiteit houdt altijd haar eigen server.",
+                  style="CardMuted.TLabel", wraplength=520).pack(anchor="w", pady=(2, 0))
         self.webrtc = tk.BooleanVar(value=self.cfg["block_webrtc_leak"])
         ttk.Checkbutton(c3, text="WebRTC-lek blokkeren  (verbergt je echte IP, aanbevolen)",
                         variable=self.webrtc, command=self._save_net).pack(anchor="w", pady=(8, 0))
@@ -674,6 +689,12 @@ class App(tk.Tk):
         self.cfg["proxy_mode"] = self.proxy_mode.get()
         self.cfg["proxy_order"] = self.proxy_order.get()
         self.cfg["block_webrtc_leak"] = bool(self.webrtc.get())
+        self.cfg["skip_slow_servers"] = bool(self.skip_slow.get())
+        try:
+            self.cfg["max_latency_ms"] = max(50, min(2000, int(self.max_latency.get())))
+        except ValueError:
+            pass
+        self.max_latency.set(str(self.cfg["max_latency_ms"]))
         core.save_config(self.cfg)
         self._refresh_proxy_count()
         self._refresh_pill()

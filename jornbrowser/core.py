@@ -90,6 +90,9 @@ DEFAULT_CONFIG = {
     "devtools_allow_paste": True,
     # Venster bij het openen: "normal", "maximized" of "fullscreen" (F11)
     "window_mode": "maximized",
+    # VPN: servers met een hoge reactietijd overslaan en een snellere nemen
+    "skip_slow_servers": True,
+    "max_latency_ms": 300,
 }
 
 WINDOW_MODES = {"Normaal venster": "normal", "Gemaximaliseerd": "maximized",
@@ -546,6 +549,51 @@ def socks5_probe(port: int, host: str = "1.1.1.1", dst_port: int = 443, timeout:
         return False
 
 
+def measure_latency(port: int, n: int = 3) -> int | None:
+    """Reactietijd (ms, mediaan) van een echte verbinding via de tunnel naar buiten."""
+    times = []
+    for _ in range(n):
+        t = time.monotonic()
+        if socks5_probe(port, timeout=3):
+            times.append((time.monotonic() - t) * 1000)
+    if not times:
+        return None
+    return int(sorted(times)[len(times) // 2])
+
+
+# Gemeten snelheden worden onthouden, zodat trage servers de volgende keer
+# meteen overgeslagen worden (een meting blijft 12 uur geldig).
+SPEED_VALID_SECONDS = 12 * 3600
+
+
+def vpn_speed_path() -> Path:
+    return data_dir() / "vpn_speed.json"
+
+
+def load_speeds() -> dict:
+    try:
+        data = json.loads(vpn_speed_path().read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def record_speed(name: str, ms: int | None) -> None:
+    data = load_speeds()
+    data[name] = {"ms": ms, "t": int(time.time())}
+    try:
+        vpn_speed_path().write_text(json.dumps(data, indent=1), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def known_slow(name: str, max_ms: int, speeds: dict | None = None) -> bool:
+    e = (speeds if speeds is not None else load_speeds()).get(name)
+    if not isinstance(e, dict) or time.time() - e.get("t", 0) > SPEED_VALID_SECONDS:
+        return False
+    return e.get("ms") is None or e["ms"] > max_ms
+
+
 class VpnTunnel:
     def __init__(self, conf: Path, workdir: Path):
         self.conf = conf
@@ -553,6 +601,7 @@ class VpnTunnel:
         self.workdir = workdir
         self.port = 0
         self.process: subprocess.Popen | None = None
+        self.latency_ms: int | None = None
 
     def start(self, timeout: float = 12) -> None:
         exe = find_wireproxy()
@@ -1010,6 +1059,8 @@ class Identity:
     def describe(self) -> str:
         if self.tunnel:
             via = f"VPN {self.tunnel.name}"
+            if self.tunnel.latency_ms is not None:
+                via += f" ({self.tunnel.latency_ms} ms)"
         else:
             via = self.proxy.display() if self.proxy else "systeem-VPN / directe verbinding"
         who = f"★ {self.saved.name}" if self.saved else f"Identiteit #{self.number}"
@@ -1137,24 +1188,54 @@ class IdentityManager:
                              "Voeg meer .conf-bestanden toe of sluit een identiteit.")
         tried: list[str] = []
         preferred = next((c for c in free if c.name == prefer), None) if prefer else None
-        if preferred:  # bewaarde identiteit: eerst haar eigen server (= zelfde IP)
+        if preferred:  # bewaarde identiteit: eerst haar eigen server (= zelfde IP), ook als die traag is
             tried.append(str(preferred))
             tunnel = VpnTunnel(preferred, profile)
             try:
                 tunnel.start()
+                tunnel.latency_ms = measure_latency(tunnel.port)
+                record_speed(tunnel.name, tunnel.latency_ms)
                 return tunnel
             except ConnectionError:
-                pass
+                record_speed(preferred.stem, None)
+        skip_slow = self.cfg.get("skip_slow_servers", True)
+        max_ms = int(self.cfg.get("max_latency_ms", 300))
+        speeds = load_speeds()
+        pool = [c for c in free if str(c) not in tried]
+        if skip_slow:
+            fast = [c for c in pool if not known_slow(c.stem, max_ms, speeds)]
+            if fast:
+                if len(fast) < len(pool):
+                    log(f"trage servers overgeslagen: {len(pool) - len(fast)}")
+                pool = fast
         self.picker.order = self.cfg.get("proxy_order", "random")
-        for _ in range(min(3, len(free) - len(tried))):  # werkt een server niet? volgende
-            choice = self.picker.pick([Proxy(str(c)) for c in free if str(c) not in tried])
+        best: VpnTunnel | None = None  # traag maar werkend: reserve als niets sneller lukt
+        for _ in range(min(5, len(pool))):  # werkt een server niet of is hij traag? volgende
+            choice = self.picker.pick([Proxy(str(c)) for c in pool if str(c) not in tried])
             tried.append(choice.url)
             tunnel = VpnTunnel(Path(choice.url), profile)
             try:
                 tunnel.start()
-                return tunnel
             except ConnectionError:
+                record_speed(tunnel.name, None)
                 continue
+            tunnel.latency_ms = measure_latency(tunnel.port)
+            record_speed(tunnel.name, tunnel.latency_ms)
+            ms = tunnel.latency_ms
+            if not skip_slow or (ms is not None and ms <= max_ms):
+                if best:
+                    best.stop()
+                return tunnel
+            log(f"VPN traag: {tunnel.name} ({ms} ms), volgende proberen")
+            if best is None or (ms is not None and (best.latency_ms is None or ms < best.latency_ms)):
+                if best:
+                    best.stop()
+                best = tunnel
+            else:
+                tunnel.stop()
+        if best:
+            log(f"geen snelle server gevonden, snelste genomen: {best.name} ({best.latency_ms} ms)")
+            return best
         raise ConnectionError("Geen verbinding met de VPN (geprobeerd: "
                               + ", ".join(Path(t).stem for t in tried) + ").")
 

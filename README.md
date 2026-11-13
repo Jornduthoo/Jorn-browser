@@ -98,6 +98,10 @@ haar **eigen VPN-server**:
 - DNS-opvragingen gaan ook door de VPN.
 
 Werkt een server niet, dan probeert Jorn Browser automatisch de volgende.
+**Trage servers worden overgeslagen**: bij elke verbinding meet Jorn Browser de
+reactietijd. Is een server trager dan 300 ms (instelbaar in het tabblad *Netwerk*),
+dan neemt hij een andere en onthoudt hij dat 12 uur lang. Je ziet de gemeten tijd
+achter de servernaam, bv. "VPN Belgie (35 ms)".
 
 ### Je VPN-servers toevoegen (eenmalig)
 
