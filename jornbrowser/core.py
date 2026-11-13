@@ -855,3 +855,77 @@ class IdentityManager:
         for i in gone:
             self.close(i)
         return gone
+
+
+# --------------------------------------------------------------------------- Mullvad-account
+#
+# Het accountnummer werkt als een wachtwoord. Het staat alleen lokaal in
+# data/ (nooit in git). Op Windows wordt het versleuteld met DPAPI: alleen
+# jouw Windows-gebruiker op deze pc kan het weer lezen.
+
+MULLVAD_ACCOUNT_URL = "https://mullvad.net/account"
+MULLVAD_WG_CONFIG_URL = "https://mullvad.net/account/wireguard-config"
+
+
+def mullvad_account_path() -> Path:
+    return data_dir() / "mullvad_account.bin"
+
+
+def normalize_mullvad_account(text: str) -> str | None:
+    digits = re.sub(r"[\s-]", "", text or "")
+    return digits if re.fullmatch(r"\d{16}", digits) else None
+
+
+def format_mullvad_account(number: str) -> str:
+    return " ".join(number[i:i + 4] for i in range(0, len(number), 4))
+
+
+def _dpapi(data: bytes, protect: bool) -> bytes:
+    import ctypes
+    from ctypes import wintypes
+
+    class BLOB(ctypes.Structure):
+        _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+    buf = ctypes.create_string_buffer(data, len(data))
+    blob_in = BLOB(len(data), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char)))
+    blob_out = BLOB()
+    crypt32 = ctypes.windll.crypt32  # type: ignore[attr-defined]
+    fn = crypt32.CryptProtectData if protect else crypt32.CryptUnprotectData
+    ok = fn(ctypes.byref(blob_in), None, None, None, None, 0x1, ctypes.byref(blob_out))  # 0x1 = geen UI
+    if not ok:
+        raise OSError("Windows-versleuteling (DPAPI) mislukt.")
+    try:
+        return ctypes.string_at(blob_out.pbData, blob_out.cbData)
+    finally:
+        ctypes.windll.kernel32.LocalFree(blob_out.pbData)  # type: ignore[attr-defined]
+
+
+def save_mullvad_account(number: str) -> None:
+    norm = normalize_mullvad_account(number)
+    if not norm:
+        raise ValueError("Een Mullvad-accountnummer bestaat uit 16 cijfers.")
+    if os.name == "nt":
+        payload = b"dpapi:" + _dpapi(norm.encode(), protect=True)
+    else:
+        payload = b"plain:" + norm.encode()  # buiten Windows: niet versleuteld
+    mullvad_account_path().write_bytes(payload)
+
+
+def load_mullvad_account() -> str:
+    try:
+        payload = mullvad_account_path().read_bytes()
+    except OSError:
+        return ""
+    try:
+        if payload.startswith(b"dpapi:"):
+            return _dpapi(payload[6:], protect=False).decode()
+        if payload.startswith(b"plain:"):
+            return payload[6:].decode()
+    except (OSError, ValueError, AttributeError):
+        pass
+    return ""
+
+
+def forget_mullvad_account() -> None:
+    mullvad_account_path().unlink(missing_ok=True)

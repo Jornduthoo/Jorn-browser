@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import threading
+import webbrowser
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
@@ -30,7 +31,7 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Jorn Browser")
-        self.geometry("640x720")
+        self.geometry("640x780")
         self.minsize(560, 620)
         self.F = T.apply(self)
         self._set_icon()
@@ -211,6 +212,32 @@ class App(tk.Tk):
 
     def _build_settings(self, parent):
         f = ttk.Frame(parent, padding=(4, 14, 4, 10))
+
+        m = T.card(f)
+        m.outer.pack(fill="x", pady=(0, 12))
+        ttk.Label(m, text="Mullvad-account", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(m, text="Alleen op deze pc bewaard" + (", versleuteld met Windows." if os.name == "nt" else ".")
+                  + " Behandel het als een wachtwoord.", style="CardMuted.TLabel").pack(anchor="w", pady=(2, 8))
+        row = ttk.Frame(m, style="Card.TFrame")
+        row.pack(fill="x")
+        saved = core.load_mullvad_account()
+        self.mullvad_acc = tk.StringVar(value=core.format_mullvad_account(saved) if saved else "")
+        self.mullvad_entry = ttk.Entry(row, textvariable=self.mullvad_acc, show="•", font=self.F["h2"])
+        self.mullvad_entry.pack(side="left", fill="x", expand=True)
+        self.mullvad_show = ttk.Button(row, text="Toon", width=6, command=self._toggle_mullvad)
+        self.mullvad_show.pack(side="left", padx=(8, 0))
+        row2 = ttk.Frame(m, style="Card.TFrame")
+        row2.pack(fill="x", pady=(8, 0))
+        ttk.Button(row2, text="Opslaan", command=self.save_mullvad).pack(side="left")
+        ttk.Button(row2, text="Kopiëren", command=self.copy_mullvad).pack(side="left", padx=6)
+        ttk.Button(row2, text="Vergeten", style="Danger.TButton", command=self.forget_mullvad).pack(side="left")
+        row3 = ttk.Frame(m, style="Card.TFrame")
+        row3.pack(fill="x", pady=(8, 0))
+        ttk.Button(row3, text="Mijn account ↗",
+                   command=lambda: webbrowser.open(core.MULLVAD_ACCOUNT_URL)).pack(side="left")
+        ttk.Button(row3, text="WireGuard-bestanden maken ↗",
+                   command=lambda: webbrowser.open(core.MULLVAD_WG_CONFIG_URL)).pack(side="left", padx=6)
+
         c = T.card(f)
         c.outer.pack(fill="x")
         ttk.Label(c, text="Chromium (chrome.exe)", style="CardTitle.TLabel").pack(anchor="w")
@@ -389,6 +416,44 @@ class App(tk.Tk):
                 self.after(0, lambda: messagebox.showerror("Extensie", f"Toevoegen mislukt: {err}"))
 
         threading.Thread(target=work, daemon=True).start()
+
+    def _toggle_mullvad(self):
+        hidden = self.mullvad_entry.cget("show") == "•"
+        self.mullvad_entry.configure(show="" if hidden else "•")
+        self.mullvad_show.configure(text="Verberg" if hidden else "Toon")
+
+    def save_mullvad(self):
+        try:
+            core.save_mullvad_account(self.mullvad_acc.get())
+        except (ValueError, OSError) as e:
+            messagebox.showerror("Mullvad-account", str(e))
+            return
+        self.mullvad_acc.set(core.format_mullvad_account(core.load_mullvad_account()))
+        self.status.set("✔ Mullvad-account opgeslagen (alleen op deze pc).")
+
+    def copy_mullvad(self):
+        number = core.normalize_mullvad_account(self.mullvad_acc.get())
+        if not number:
+            messagebox.showwarning("Mullvad-account", "Vul eerst een geldig accountnummer in (16 cijfers).")
+            return
+        self.clipboard_clear()
+        self.clipboard_append(number)
+        self.status.set("✔ Gekopieerd. Het klembord wordt over 30 seconden gewist.")
+
+        def wipe():
+            try:
+                if self.clipboard_get() == number:
+                    self.clipboard_clear()
+                    self.status.set("Klembord gewist.")
+            except tk.TclError:
+                pass
+        self.after(30000, wipe)
+
+    def forget_mullvad(self):
+        if messagebox.askyesno("Mullvad-account", "Accountnummer van deze pc wissen?"):
+            core.forget_mullvad_account()
+            self.mullvad_acc.set("")
+            self.status.set("Mullvad-account gewist van deze pc.")
 
     def pick_chromium(self):
         p = filedialog.askopenfilename(title="Kies chrome.exe van Chromium",
