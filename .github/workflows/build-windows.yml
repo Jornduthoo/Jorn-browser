@@ -26,9 +26,9 @@ jobs:
       - name: PyInstaller installeren
         run: pip install pyinstaller==6.11.1
       - name: Bouwen
-        run: pyinstaller --noconfirm --onefile --windowed --name JornBrowser --add-binary "wireproxy.exe;." jornbrowser.pyw
+        run: pyinstaller --noconfirm --onefile --windowed --name JornBrowser --add-binary "wireproxy.exe;." --add-data "assets;assets" --icon assets/icon.ico jornbrowser.pyw
       - name: Snelle controle (import)
-        run: python -c "import jornbrowser.app, jornbrowser.core; print('ok')"
+        run: python -c "import jornbrowser.app, jornbrowser.core, jornbrowser.theme; print('ok')"
       - uses: actions/upload-artifact@v4
         with:
           name: JornBrowser-windows

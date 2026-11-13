@@ -11,8 +11,10 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 
 try:
     from . import core
+    from . import theme as T
 except ImportError:  # gestart als los script / PyInstaller
     import core  # type: ignore
+    import theme as T  # type: ignore
 
 
 def open_path(path) -> None:
@@ -28,20 +30,26 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Jorn Browser")
-        self.geometry("600x600")
-        self.minsize(480, 440)
+        self.geometry("640x720")
+        self.minsize(560, 620)
+        self.F = T.apply(self)
+        self._set_icon()
         self.cfg = core.load_config()
         self.mgr = core.IdentityManager(self.cfg)
+        self.status = tk.StringVar(value="Klaar. Klik op Nieuwe identiteit om te starten.")
 
+        self._build_header()
         nb = ttk.Notebook(self)
-        nb.pack(fill="both", expand=True, padx=8, pady=8)
-        nb.add(self._build_main(nb), text="Identiteit")
-        nb.add(self._build_network(nb), text="Netwerk")
-        nb.add(self._build_extensions(nb), text="Extensies")
-        nb.add(self._build_settings(nb), text="Instellingen")
+        nb.pack(fill="both", expand=True, padx=14, pady=(4, 0))
+        nb.add(self._build_main(nb), text="  Identiteit  ")
+        nb.add(self._build_network(nb), text="  Netwerk  ")
+        nb.add(self._build_extensions(nb), text="  Extensies  ")
+        nb.add(self._build_settings(nb), text="  Instellingen  ")
 
-        self.status = tk.StringVar(value="Klaar.")
-        ttk.Label(self, textvariable=self.status, anchor="w").pack(fill="x", padx=10, pady=(0, 8))
+        bar = tk.Frame(self, bg=T.PANEL, height=34)
+        bar.pack(fill="x", side="bottom")
+        tk.Label(bar, textvariable=self.status, bg=T.PANEL, fg=T.MUTED, anchor="w",
+                 font=self.F["small"], padx=14, pady=8).pack(fill="x")
 
         self.bind_all("<Control-n>", lambda e: self.new_identity())
         self.bind_all("<Control-N>", lambda e: self.new_identity())
@@ -49,137 +57,181 @@ class App(tk.Tk):
         self.bind_all("<Control-S>", lambda e: self.save_identity())
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.after(1000, self._tick)
+        self._refresh_identities()
 
         if not core.find_chromium(self.cfg):
             self.after(300, self._warn_no_chromium)
 
-    # ------------------------------------------------------------------ tabbladen
+    def _set_icon(self):
+        try:
+            self._icon = tk.PhotoImage(file=str(T.resource("logo-64.png")))
+            self.iconphoto(True, self._icon)
+            if os.name == "nt":
+                self.iconbitmap(default=str(T.resource("icon.ico")))
+        except tk.TclError:
+            self._icon = None
+
+    # ------------------------------------------------------------------ opbouw
+
+    def _build_header(self):
+        h = ttk.Frame(self, padding=(16, 14, 16, 6))
+        h.pack(fill="x")
+        try:
+            self._logo = tk.PhotoImage(file=str(T.resource("logo-64.png"))).subsample(1)
+            tk.Label(h, image=self._logo, bg=T.BG).pack(side="left")
+        except tk.TclError:
+            pass
+        txt = ttk.Frame(h)
+        txt.pack(side="left", padx=(12, 0))
+        ttk.Label(txt, text="Jorn Browser", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(txt, text="Privé. Snel. Telkens iemand anders.", style="Muted.TLabel").pack(anchor="w")
+        self.pill = T.Pill(h, self.F["small"])
+        self.pill.pack(side="right")
 
     def _build_main(self, parent):
-        f = ttk.Frame(parent, padding=12)
-        style = ttk.Style(self)
-        style.configure("Big.TButton", font=("Segoe UI", 14, "bold"), padding=12)
+        f = ttk.Frame(parent, padding=(4, 14, 4, 10))
 
-        top = ttk.Frame(f)
-        top.pack(fill="x")
-        top.columnconfigure(0, weight=3)
-        top.columnconfigure(1, weight=2)
-        ttk.Button(top, text="🔄  Nieuwe identiteit  (Ctrl+N)", style="Big.TButton",
-                   command=self.new_identity).grid(row=0, column=0, sticky="ew")
-        ttk.Button(top, text="💾  Bewaren  (Ctrl+S)", style="Big.TButton",
-                   command=self.save_identity).grid(row=0, column=1, sticky="ew", padx=(6, 0))
-        ttk.Label(f, text="Nieuwe identiteit: alles wissen en opnieuw beginnen met een ander IP.  "
-                          "Bewaren: deze identiteit onthouden (logins, cookies en dezelfde VPN-server).",
-                  wraplength=520, foreground="#555").pack(fill="x", pady=(6, 10))
+        self.big_btn = T.GradientButton(f, "↻   Nieuwe identiteit", self.new_identity, height=78,
+                                        font=self.F["hero"], subtext="Alles wissen  ·  nieuw IP  ·  Ctrl+N")
+        self.big_btn.pack(fill="x")
 
         row = ttk.Frame(f)
-        row.pack(fill="x")
-        ttk.Button(row, text="➕ Extra identiteit", command=self.extra_identity).pack(side="left")
-        ttk.Button(row, text="🌐 Toon mijn IP", command=self.show_ip).pack(side="left", padx=6)
-        ttk.Button(row, text="✖ Alles sluiten", command=self.close_all).pack(side="right")
+        row.pack(fill="x", pady=(10, 0))
+        for i in range(3):
+            row.columnconfigure(i, weight=1, uniform="b")
+        sec = ("#232846", "#2d3360")
+        T.GradientButton(row, "★  Bewaren", self.save_identity, height=44, radius=10, colors=sec,
+                         font=self.F["bold"]).grid(row=0, column=0, sticky="ew")
+        T.GradientButton(row, "◎  Toon mijn IP", self.show_ip, height=44, radius=10, colors=sec,
+                         font=self.F["bold"]).grid(row=0, column=1, sticky="ew", padx=8)
+        T.GradientButton(row, "＋  Extra venster", self.extra_identity, height=44, radius=10, colors=sec,
+                         font=self.F["bold"]).grid(row=0, column=2, sticky="ew")
 
-        ttk.Label(f, text="Open:").pack(anchor="w", pady=(10, 2))
-        self.ident_list = tk.Listbox(f, height=4)
-        self.ident_list.pack(fill="x")
-        ttk.Button(f, text="Geselecteerde sluiten", command=self.close_selected).pack(anchor="e", pady=(4, 0))
+        c = T.card(f)
+        c.outer.pack(fill="x", pady=(14, 0))
+        top = ttk.Frame(c, style="Card.TFrame")
+        top.pack(fill="x")
+        ttk.Label(top, text="Nu open", style="CardTitle.TLabel").pack(side="left")
+        ttk.Button(top, text="Alles sluiten", style="Danger.TButton", command=self.close_all).pack(side="right")
+        ttk.Button(top, text="Sluiten", command=self.close_selected).pack(side="right", padx=6)
+        self.ident_list = T.listbox(c, height=3)
+        self.ident_list.pack(fill="x", pady=(10, 0))
 
-        ttk.Label(f, text="💾 Bewaarde identiteiten (dubbelklik om te openen):").pack(anchor="w", pady=(6, 2))
-        self.saved_list = tk.Listbox(f, height=5)
-        self.saved_list.pack(fill="both", expand=True)
+        c2 = T.card(f)
+        c2.outer.pack(fill="both", expand=True, pady=(12, 0))
+        top2 = ttk.Frame(c2, style="Card.TFrame")
+        top2.pack(fill="x")
+        ttk.Label(top2, text="★  Bewaarde identiteiten", style="CardTitle.TLabel").pack(side="left")
+        ttk.Button(top2, text="Verwijderen", style="Danger.TButton", command=self.delete_saved).pack(side="right")
+        ttk.Button(top2, text="Openen", command=self.open_saved).pack(side="right", padx=6)
+        ttk.Label(c2, text="Logins, cookies en dezelfde VPN-server blijven bewaard. Dubbelklik om te openen.",
+                  style="CardMuted.TLabel").pack(anchor="w", pady=(4, 0))
+        self.saved_list = T.listbox(c2, height=4)
+        self.saved_list.pack(fill="both", expand=True, pady=(8, 0))
         self.saved_list.bind("<Double-Button-1>", lambda e: self.open_saved())
-        srow = ttk.Frame(f)
-        srow.pack(fill="x", pady=(4, 0))
-        ttk.Button(srow, text="Openen", command=self.open_saved).pack(side="left")
-        ttk.Button(srow, text="Verwijderen", command=self.delete_saved).pack(side="right")
-        self._refresh_saved()
         return f
 
     def _build_network(self, parent):
-        f = ttk.Frame(parent, padding=12)
+        f = ttk.Frame(parent, padding=(4, 14, 4, 10))
         self.proxy_mode = tk.StringVar(value=self.cfg["proxy_mode"])
 
-        ttk.Radiobutton(f, text="Ingebouwde VPN (aanbevolen): elke identiteit een andere VPN-server",
-                        value="vpn", variable=self.proxy_mode, command=self._save_net).pack(anchor="w")
-        ttk.Label(f, text="Geen VPN-app nodig. Voeg WireGuard-bestanden (.conf) toe van je VPN-dienst.",
-                  foreground="#555").pack(anchor="w", padx=22)
-        vbtn = ttk.Frame(f)
-        vbtn.pack(anchor="w", padx=22, pady=4)
-        ttk.Button(vbtn, text="VPN-bestanden toevoegen…", command=self.add_vpn_configs).pack(side="left")
-        ttk.Button(vbtn, text="VPN-map openen", command=lambda: open_path(core.vpn_dir())).pack(side="left", padx=6)
+        c = T.card(f)
+        c.outer.pack(fill="x")
+        ttk.Radiobutton(c, text="Ingebouwde VPN  (aanbevolen)", value="vpn",
+                        variable=self.proxy_mode, command=self._save_net).pack(anchor="w")
+        ttk.Label(c, text="Elke identiteit een eigen VPN-server. Geen VPN-app nodig: voeg WireGuard-"
+                          "bestanden (.conf of .zip) toe van je VPN-dienst.",
+                  style="CardMuted.TLabel", wraplength=520).pack(anchor="w", padx=(26, 0))
+        vbtn = ttk.Frame(c, style="Card.TFrame")
+        vbtn.pack(anchor="w", padx=(26, 0), pady=(10, 4))
+        ttk.Button(vbtn, text="＋ VPN-bestanden toevoegen", command=self.add_vpn_configs).pack(side="left")
+        ttk.Button(vbtn, text="Map openen", command=lambda: open_path(core.vpn_dir())).pack(side="left", padx=6)
         self.vpn_count = tk.StringVar()
-        ttk.Label(f, textvariable=self.vpn_count, foreground="#555").pack(anchor="w", padx=22)
+        ttk.Label(c, textvariable=self.vpn_count, style="CardMuted.TLabel",
+                  wraplength=520).pack(anchor="w", padx=(26, 0))
 
-        ttk.Radiobutton(f, text="Proxylijst (proxies.txt)", value="list", variable=self.proxy_mode,
-                        command=self._save_net).pack(anchor="w", pady=(10, 0))
-        btns = ttk.Frame(f)
-        btns.pack(anchor="w", padx=22, pady=4)
-        ttk.Button(btns, text="proxies.txt bewerken", command=self.edit_proxies).pack(side="left")
+        c2 = T.card(f)
+        c2.outer.pack(fill="x", pady=(12, 0))
+        ttk.Radiobutton(c2, text="Proxylijst  (proxies.txt)", value="list", variable=self.proxy_mode,
+                        command=self._save_net).pack(anchor="w")
+        btns = ttk.Frame(c2, style="Card.TFrame")
+        btns.pack(anchor="w", padx=(26, 0), pady=(6, 4))
+        ttk.Button(btns, text="Bewerken", command=self.edit_proxies).pack(side="left")
         ttk.Button(btns, text="Mullvad-lijst ophalen", command=self.fetch_mullvad).pack(side="left", padx=6)
         self.proxy_count = tk.StringVar()
-        ttk.Label(f, textvariable=self.proxy_count, foreground="#555").pack(anchor="w", padx=22)
+        ttk.Label(c2, textvariable=self.proxy_count, style="CardMuted.TLabel").pack(anchor="w", padx=(26, 0))
+        ttk.Radiobutton(c2, text="Geen  (een aparte VPN-app op je pc bepaalt het IP)", value="none",
+                        variable=self.proxy_mode, command=self._save_net).pack(anchor="w", pady=(12, 0))
 
-        ttk.Radiobutton(f, text="Geen: een aparte VPN-app op je pc bepaalt het IP", value="none",
-                        variable=self.proxy_mode, command=self._save_net).pack(anchor="w", pady=(10, 0))
-
-        order = ttk.Frame(f)
-        order.pack(anchor="w", pady=(12, 0))
+        c3 = T.card(f)
+        c3.outer.pack(fill="x", pady=(12, 0))
+        order = ttk.Frame(c3, style="Card.TFrame")
+        order.pack(anchor="w")
         self.proxy_order = tk.StringVar(value=self.cfg["proxy_order"])
-        ttk.Label(order, text="Server kiezen:").pack(side="left")
+        ttk.Label(order, text="Server kiezen:", style="Card.TLabel").pack(side="left", padx=(0, 10))
         ttk.Radiobutton(order, text="willekeurig", value="random", variable=self.proxy_order,
-                        command=self._save_net).pack(side="left")
+                        command=self._save_net).pack(side="left", padx=(0, 10))
         ttk.Radiobutton(order, text="na elkaar", value="sequential", variable=self.proxy_order,
                         command=self._save_net).pack(side="left")
-        self._refresh_proxy_count()
-
-        ttk.Separator(f).pack(fill="x", pady=12)
         self.webrtc = tk.BooleanVar(value=self.cfg["block_webrtc_leak"])
-        ttk.Checkbutton(f, text="WebRTC-lek blokkeren (aanbevolen: verbergt je echte IP)",
-                        variable=self.webrtc, command=self._save_net).pack(anchor="w")
+        ttk.Checkbutton(c3, text="WebRTC-lek blokkeren  (verbergt je echte IP, aanbevolen)",
+                        variable=self.webrtc, command=self._save_net).pack(anchor="w", pady=(8, 0))
+        self._refresh_proxy_count()
         return f
 
     def _build_extensions(self, parent):
-        f = ttk.Frame(parent, padding=12)
-        ttk.Label(f, text="Plak een Chrome Web Store-link (of extensie-ID):").pack(anchor="w")
-        row = ttk.Frame(f)
-        row.pack(fill="x", pady=4)
+        f = ttk.Frame(parent, padding=(4, 14, 4, 10))
+        c = T.card(f)
+        c.outer.pack(fill="x")
+        ttk.Label(c, text="Extensie toevoegen", style="CardTitle.TLabel").pack(anchor="w")
+        ttk.Label(c, text="Plak een link uit de Chrome Web Store (of een extensie-ID).",
+                  style="CardMuted.TLabel").pack(anchor="w", pady=(2, 8))
+        row = ttk.Frame(c, style="Card.TFrame")
+        row.pack(fill="x")
         self.ext_url = tk.StringVar()
         entry = ttk.Entry(row, textvariable=self.ext_url)
         entry.pack(side="left", fill="x", expand=True)
         entry.bind("<Return>", lambda e: self.add_extension())
-        ttk.Button(row, text="Toevoegen", command=self.add_extension).pack(side="left", padx=(6, 0))
+        ttk.Button(row, text="＋ Toevoegen", command=self.add_extension).pack(side="left", padx=(8, 0))
 
-        ttk.Label(f, text="Geïnstalleerd (vinkje = aan). Wijzigingen gelden vanaf de volgende identiteit.",
-                  foreground="#555").pack(anchor="w", pady=(10, 2))
-        self.ext_frame = ttk.Frame(f)
+        c2 = T.card(f)
+        c2.outer.pack(fill="both", expand=True, pady=(12, 0))
+        top = ttk.Frame(c2, style="Card.TFrame")
+        top.pack(fill="x")
+        ttk.Label(top, text="Geïnstalleerd", style="CardTitle.TLabel").pack(side="left")
+        ttk.Button(top, text="Map openen", command=lambda: open_path(core.extensions_dir())).pack(side="right")
+        ttk.Button(top, text="Vernieuwen", command=self._refresh_extensions).pack(side="right", padx=6)
+        ttk.Label(c2, text="Vinkje = aan. Wijzigingen gelden vanaf de volgende identiteit. "
+                           "Tip: hoe minder extensies, hoe minder herkenbaar je bent.",
+                  style="CardMuted.TLabel", wraplength=520).pack(anchor="w", pady=(4, 8))
+        self.ext_frame = ttk.Frame(c2, style="Card.TFrame")
         self.ext_frame.pack(fill="both", expand=True)
-
-        row2 = ttk.Frame(f)
-        row2.pack(fill="x", pady=(6, 0))
-        ttk.Button(row2, text="Extensiemap openen", command=lambda: open_path(core.extensions_dir())).pack(side="left")
-        ttk.Button(row2, text="Vernieuwen", command=self._refresh_extensions).pack(side="left", padx=6)
         self._refresh_extensions()
         return f
 
     def _build_settings(self, parent):
-        f = ttk.Frame(parent, padding=12)
-        ttk.Label(f, text="Chromium (chrome.exe):").pack(anchor="w")
-        row = ttk.Frame(f)
-        row.pack(fill="x", pady=4)
+        f = ttk.Frame(parent, padding=(4, 14, 4, 10))
+        c = T.card(f)
+        c.outer.pack(fill="x")
+        ttk.Label(c, text="Chromium (chrome.exe)", style="CardTitle.TLabel").pack(anchor="w")
+        row = ttk.Frame(c, style="Card.TFrame")
+        row.pack(fill="x", pady=(8, 0))
         found = core.find_chromium(self.cfg)
         self.chromium_path = tk.StringVar(value=str(found) if found else "")
         ttk.Entry(row, textvariable=self.chromium_path).pack(side="left", fill="x", expand=True)
-        ttk.Button(row, text="Kiezen…", command=self.pick_chromium).pack(side="left", padx=(6, 0))
+        ttk.Button(row, text="Kiezen…", command=self.pick_chromium).pack(side="left", padx=(8, 0))
 
-        ttk.Label(f, text="Startpagina:").pack(anchor="w", pady=(10, 0))
+        c2 = T.card(f)
+        c2.outer.pack(fill="x", pady=(12, 0))
+        ttk.Label(c2, text="Startpagina", style="CardTitle.TLabel").pack(anchor="w")
         self.start_url = tk.StringVar(value=self.cfg["start_url"])
-        ttk.Entry(f, textvariable=self.start_url).pack(fill="x", pady=4)
-        ttk.Label(f, text="IP-controlepagina:").pack(anchor="w", pady=(6, 0))
+        ttk.Entry(c2, textvariable=self.start_url).pack(fill="x", pady=(6, 10))
+        ttk.Label(c2, text="IP-controlepagina", style="CardTitle.TLabel").pack(anchor="w")
         self.check_url = tk.StringVar(value=self.cfg["check_url"])
-        ttk.Entry(f, textvariable=self.check_url).pack(fill="x", pady=4)
-        ttk.Button(f, text="Opslaan", command=self._save_settings).pack(anchor="e", pady=8)
+        ttk.Entry(c2, textvariable=self.check_url).pack(fill="x", pady=(6, 10))
+        ttk.Button(c2, text="Opslaan", command=self._save_settings).pack(anchor="e")
 
-        ttk.Separator(f).pack(fill="x", pady=8)
-        ttk.Button(f, text="Datamap openen", command=lambda: open_path(core.data_dir())).pack(anchor="w")
+        ttk.Button(f, text="Datamap openen", command=lambda: open_path(core.data_dir())).pack(anchor="w", pady=(12, 0))
         return f
 
     # ------------------------------------------------------------------ acties
@@ -202,6 +254,7 @@ class App(tk.Tk):
             return
         self._busy = True
         self.status.set(busy_msg)
+        self.big_btn.set_busy(True, "Bezig…")
 
         def work():
             try:
@@ -215,6 +268,7 @@ class App(tk.Tk):
 
     def _bg_done(self, msg, err):
         self._busy = False
+        self.big_btn.set_busy(False, "↻   Nieuwe identiteit")
         self._refresh_identities()
         if err:
             self.status.set("Fout: " + err)
@@ -236,7 +290,7 @@ class App(tk.Tk):
                                            "Klik eerst op 'Nieuwe identiteit'.")
             return
         sel = self.ident_list.curselection()
-        ident = self.mgr.identities[sel[0]] if sel else unsaved[-1]
+        ident = self.mgr.identities[sel[0]] if (sel and sel[0] < len(self.mgr.identities)) else unsaved[-1]
         if ident.saved:
             ident = unsaved[-1]
         default = f"Identiteit {len(core.list_saved_identities()) + 1}"
@@ -244,12 +298,12 @@ class App(tk.Tk):
         if not name:
             return
         self._run_bg(lambda: self.mgr.save(ident, name),
-                     lambda i: f"💾 Bewaard: {i.describe()}", "Bewaren…")
+                     lambda i: f"★ Bewaard: {i.describe()}", "Bewaren…")
 
     def _selected_saved(self):
         sel = self.saved_list.curselection()
         saved = core.list_saved_identities()
-        if not sel or sel[0] >= len(saved):
+        if not sel or sel[0] >= len(saved) or not saved:
             messagebox.showinfo("Bewaarde identiteiten", "Selecteer eerst een bewaarde identiteit.")
             return None
         return saved[sel[0]]
@@ -275,14 +329,14 @@ class App(tk.Tk):
         self.saved_list.delete(0, "end")
         open_paths = {i.saved.path for i in self.mgr.identities if i.saved}
         for si in core.list_saved_identities():
-            self.saved_list.insert("end", ("🟢 " if si.path in open_paths else "") + si.describe())
+            self.saved_list.insert("end", ("●  " if si.path in open_paths else "    ") + si.describe())
 
     def close_all(self):
         self._run(self.mgr.close_all, "Alle identiteiten gesloten en gewist.")
 
     def close_selected(self):
         sel = self.ident_list.curselection()
-        if sel:
+        if sel and sel[0] < len(self.mgr.identities):
             ident = self.mgr.identities[sel[0]]
             self._run(lambda: self.mgr.close(ident), f"Identiteit #{ident.number} gewist.")
 
@@ -351,6 +405,7 @@ class App(tk.Tk):
         self.cfg["block_webrtc_leak"] = bool(self.webrtc.get())
         core.save_config(self.cfg)
         self._refresh_proxy_count()
+        self._refresh_pill()
 
     def _save_settings(self):
         self.cfg["chromium_path"] = self.chromium_path.get().strip()
@@ -381,6 +436,7 @@ class App(tk.Tk):
             messagebox.showerror("VPN", f"Toevoegen mislukt: {e}")
             return
         self._refresh_proxy_count()
+        self._refresh_pill()
         self.status.set(f"✔ {n} VPN-server(s) toegevoegd.")
 
     def _refresh_extensions(self):
@@ -388,21 +444,40 @@ class App(tk.Tk):
             w.destroy()
         exts = core.list_extensions()
         if not exts:
-            ttk.Label(self.ext_frame, text="(nog geen extensies)", foreground="#888").pack(anchor="w")
+            ttk.Label(self.ext_frame, text="Nog geen extensies.", style="CardMuted.TLabel").pack(anchor="w")
         for ext in exts:
-            row = ttk.Frame(self.ext_frame)
-            row.pack(fill="x")
+            row = ttk.Frame(self.ext_frame, style="Card.TFrame")
+            row.pack(fill="x", pady=2)
             var = tk.BooleanVar(value=ext.enabled)
             ttk.Checkbutton(row, text=ext.name, variable=var,
                             command=lambda e=ext, v=var: core.set_extension_enabled(e, v.get())).pack(side="left")
-            ttk.Button(row, text="Verwijderen", width=11,
+            ttk.Button(row, text="Verwijderen", style="Danger.TButton",
                        command=lambda e=ext: (core.remove_extension(e), self._refresh_extensions())).pack(side="right")
 
     def _refresh_identities(self):
         self.ident_list.delete(0, "end")
         for ident in self.mgr.identities:
-            self.ident_list.insert("end", ident.describe())
+            self.ident_list.insert("end", "  " + ident.describe())
+        if not self.mgr.identities:
+            self.ident_list.insert("end", "  Nog niets open. Klik op Nieuwe identiteit.")
+            self.ident_list.itemconfig(0, fg=T.MUTED)
         self._refresh_saved()
+        self._refresh_pill()
+
+    def _refresh_pill(self):
+        mode = self.cfg.get("proxy_mode")
+        n_open = len(self.mgr.identities)
+        suffix = f"  ·  {n_open} open" if n_open else ""
+        if mode == "vpn":
+            n = len(core.list_vpn_configs())
+            if n:
+                self.pill.set(f"VPN  ·  {n} server{'s' if n != 1 else ''}{suffix}", T.OK)
+            else:
+                self.pill.set("VPN  ·  nog geen servers", T.WARN)
+        elif mode == "list":
+            self.pill.set(f"Proxy  ·  {len(core.load_proxies())}{suffix}", T.ACCENT2)
+        else:
+            self.pill.set(f"Systeem-VPN{suffix}", T.MUTED)
 
     def _tick(self):
         if not getattr(self, "_busy", False) and self.mgr.reap():

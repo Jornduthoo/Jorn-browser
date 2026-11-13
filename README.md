@@ -1,4 +1,9 @@
-# Jorn Browser
+<p align="center"><img src="assets/logo-256.png" width="120" alt="Jorn Browser-logo"></p>
+
+<h1 align="center">Jorn Browser</h1>
+<p align="center"><i>Privé. Snel. Telkens iemand anders.</i></p>
+
+<p align="center"><img src="assets/screenshot.png" width="420" alt="Schermafbeelding van Jorn Browser"></p>
 
 Een snelle privacybrowser voor Windows met **Chrome-extensies** en een knop
 **"Nieuwe identiteit"**, zoals in Tor Browser, maar veel sneller.

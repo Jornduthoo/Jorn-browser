@@ -648,7 +648,7 @@ class Identity:
             via = f"VPN {self.tunnel.name}"
         else:
             via = self.proxy.display() if self.proxy else "systeem-VPN / directe verbinding"
-        who = f"💾 {self.saved.name}" if self.saved else f"Identiteit #{self.number}"
+        who = f"★ {self.saved.name}" if self.saved else f"Identiteit #{self.number}"
         return f"{who} via {via}"
 
 

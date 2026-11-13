@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8b5cf6"/>
+      <stop offset="0.55" stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.15"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.95"/>
+    </linearGradient>
+  </defs>
+  <!-- schild -->
+  <path d="M256 28 L452 100 V252 C452 372 370 448 256 488 C142 448 60 372 60 252 V100 Z" fill="url(#g)"/>
+  <path d="M256 28 L452 100 V252 C452 372 370 448 256 488 C142 448 60 372 60 252 V100 Z"
+        fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="10"/>
+  <!-- wissel-ring (nieuwe identiteit) -->
+  <path d="M150 256 A106 106 0 0 1 340 190" fill="none" stroke="url(#ring)" stroke-width="22" stroke-linecap="round"/>
+  <path d="M362 256 A106 106 0 0 1 172 322" fill="none" stroke="url(#ring)" stroke-width="22" stroke-linecap="round"/>
+  <path d="M318 150 L358 196 L300 210 Z" fill="#ffffff" fill-opacity="0.95"/>
+  <path d="M194 362 L154 316 L212 302 Z" fill="#ffffff" fill-opacity="0.6"/>
+  <!-- J -->
+  <path d="M286 176 V268 C286 302 266 322 236 322 C214 322 198 312 190 296"
+        fill="none" stroke="#ffffff" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
