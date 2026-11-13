@@ -47,10 +47,14 @@ class App(tk.Tk):
         self.F = T.apply(self)
         self._set_icon()
         self.cfg = core.load_config()
+        core.log(f"=== Jorn Browser v{updater.current_version()} gestart (map {core.app_dir()})")
         self.mgr = core.IdentityManager(self.cfg)
         self.status = tk.StringVar(value="Klaar. Klik op Nieuwe identiteit om te starten.")
 
-        updater.cleanup_after_update()
+        if not updater.cleanup_after_update():
+            # oude versie draait nog even: straks opnieuw proberen
+            for ms in (2000, 5000, 15000, 60000):
+                self.after(ms, updater.cleanup_after_update)
         self._build_header()
         self.update_bar = tk.Frame(self, bg=T.ACCENT_MID)  # verschijnt alleen bij een update
         nb = ttk.Notebook(self)
@@ -361,6 +365,8 @@ class App(tk.Tk):
         ttk.Entry(row, textvariable=self.chromium_path).pack(side="left", fill="x", expand=True)
         ttk.Button(row, text="Kiezen…", command=self.pick_chromium).pack(side="left", padx=(8, 0))
         ttk.Button(row, text="Datamap", command=lambda: open_path(core.data_dir())).pack(side="left", padx=(6, 0))
+        ttk.Button(c, text="Logboek openen (voor probleemoplossing)",
+                   command=lambda: (core.log("logboek geopend"), open_path(core.log_path()))).pack(anchor="w", pady=(8, 0))
         self.auto_update = tk.BooleanVar(value=self.cfg.get("auto_update_check", True))
 
         def on_auto():

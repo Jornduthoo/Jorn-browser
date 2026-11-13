@@ -110,11 +110,16 @@ def install_and_restart(new_exe: Path) -> None:
                      creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
 
 
-def cleanup_after_update() -> None:
+def cleanup_after_update() -> bool:
+    """Wist de oude versie. Geeft True als er niets meer op te ruimen valt.
+    Direct na een update draait de oude versie soms nog even (bestand vergrendeld):
+    roep dit dan later opnieuw aan."""
     if not is_installed_exe():
-        return
+        return True
+    done = True
     for name in ("JornBrowser.old.exe", "JornBrowser.new.part"):
         try:
             (exe_path().parent / name).unlink(missing_ok=True)
         except OSError:
-            pass
+            done = False
+    return done

@@ -41,6 +41,22 @@ def data_dir() -> Path:
     return d
 
 
+def log_path() -> Path:
+    return data_dir() / "jornbrowser.log"
+
+
+def log(msg: str) -> None:
+    """Klein logboek om problemen op te sporen (geen wachtwoorden of sleutels)."""
+    try:
+        p = log_path()
+        if p.exists() and p.stat().st_size > 300_000:
+            p.write_text(p.read_text(encoding="utf-8", errors="replace")[-100_000:], encoding="utf-8")
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + msg + "\n")
+    except OSError:
+        pass
+
+
 def extensions_dir() -> Path:
     d = data_dir() / "extensions"
     d.mkdir(parents=True, exist_ok=True)
@@ -485,7 +501,9 @@ def find_wireproxy() -> Path | None:
     if getattr(sys, "_MEIPASS", None):  # meegebundeld in JornBrowser.exe
         bundled = Path(sys._MEIPASS) / exe
         if bundled.is_file():
-            return _stable_wireproxy(bundled)
+            stable = _stable_wireproxy(bundled)
+            log(f"wireproxy: {stable}")
+            return stable
     # Vangnet: de vaste kopie van een vorige start (data/bin)
     cands += [data_dir() / "bin" / exe, app_dir() / exe, app_dir() / "bin" / exe]
     for c in cands:
@@ -545,9 +563,12 @@ class VpnTunnel:
                 break
             if socks5_probe(self.port):
                 cfg_file.unlink(missing_ok=True)  # privésleutel niet laten rondslingeren
+                log(f"VPN verbonden: {self.name} (exe {exe})")
                 return
             time.sleep(0.2)
+        code = self.process.poll() if self.process else None
         self.stop()
+        log(f"VPN mislukt: {self.name} (exe {exe}, exitcode {code})")
         raise ConnectionError(f"VPN-server '{self.name}' reageert niet.")
 
     @property
@@ -634,6 +655,7 @@ def seed_profile(profile: Path) -> str:
         prefs.setdefault("bookmark_bar", {})["show_on_all_tabs"] = True
         changed = True
     pinned = load_pinned_extensions()
+    log(f"start profiel {profile.name}: vastgezet={pinned}, bladwijzers={'ja' if digest else 'nee'}")
     if pinned and prefs.get("extensions", {}).get("pinned_extensions") != pinned:
         prefs.setdefault("extensions", {})["pinned_extensions"] = pinned
         changed = True
@@ -660,9 +682,11 @@ def sync_pinned_back(profile: Path) -> bool:
     """Lees na het sluiten welke extensies vastgezet waren en onthoud dat."""
     try:
         prefs = json.loads((profile / "Default" / "Preferences").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except (OSError, ValueError) as e:
+        log(f"sluit profiel {profile.name}: Preferences niet leesbaar ({e})")
         return False
     pinned = prefs.get("extensions", {}).get("pinned_extensions")
+    log(f"sluit profiel {profile.name}: vastgezet in Chromium={pinned}")
     if not isinstance(pinned, list) or pinned == load_pinned_extensions():
         return False
     pinned_path().write_text(json.dumps(pinned), encoding="utf-8")
@@ -1013,10 +1037,13 @@ class IdentityManager:
 
     def _stop_browser(self, ident: Identity, graceful: bool) -> None:
         if not ident.alive():
+            log(f"venster {ident.profile.name} was al gesloten door gebruiker")
             return
         if graceful:
             # Netjes sluiten zodat Chromium cookies/logins wegschrijft.
-            if cdp_browser_close(ident.profile):
+            ok = cdp_browser_close(ident.profile)
+            log(f"netjes sluiten {ident.profile.name}: devtools={'ok' if ok else 'mislukt'}")
+            if ok:
                 try:
                     ident.process.wait(timeout=6)
                     return
