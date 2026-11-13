@@ -571,6 +571,114 @@ def search_extension(cfg: dict) -> Path | None:
     return target
 
 
+# --------------------------------------------------------------------------- bladwijzers
+#
+# Eén centrale bladwijzerlijst (data/bookmarks/Bookmarks) voor alle identiteiten.
+# Bij de start krijgt elk profiel een kopie; bij het sluiten gaan wijzigingen terug.
+
+def bookmarks_master() -> Path:
+    d = data_dir() / "bookmarks"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "Bookmarks"
+
+
+def _digest(data: bytes) -> str:
+    import hashlib
+    return hashlib.sha256(data).hexdigest()
+
+
+def seed_profile(profile: Path) -> str:
+    """Zet centrale bladwijzers in het profiel en toon de bladwijzerbalk altijd.
+    Geeft een vingerafdruk van de bladwijzers bij de start terug."""
+    default = profile / "Default"
+    default.mkdir(parents=True, exist_ok=True)
+    master = bookmarks_master()
+    digest = ""
+    if master.is_file():
+        data = master.read_bytes()
+        (default / "Bookmarks").write_bytes(data)
+        digest = _digest(data)
+    prefs_path = default / "Preferences"
+    try:
+        prefs = json.loads(prefs_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        prefs = {}
+    if prefs.get("bookmark_bar", {}).get("show_on_all_tabs") is not True:
+        prefs.setdefault("bookmark_bar", {})["show_on_all_tabs"] = True
+        prefs_path.write_text(json.dumps(prefs), encoding="utf-8")
+    return digest
+
+
+def sync_bookmarks_back(profile: Path, start_digest: str) -> bool:
+    """Schrijf gewijzigde bladwijzers van een (gesloten) profiel terug naar de centrale lijst."""
+    f = profile / "Default" / "Bookmarks"
+    try:
+        data = f.read_bytes()
+        json.loads(data)  # alleen geldige bestanden overnemen
+    except (OSError, ValueError):
+        return False
+    if _digest(data) == start_digest:
+        return False
+    master = bookmarks_master()
+    try:
+        master_data = master.read_bytes()
+    except OSError:
+        master_data = b""
+    if master_data and _digest(master_data) != start_digest:
+        # Een ander venster schreef intussen ook bladwijzers weg: samenvoegen
+        # (nieuwe adressen van dit venster toevoegen) i.p.v. overschrijven.
+        try:
+            data = _merge_bookmarks(json.loads(master_data), json.loads(data))
+        except (ValueError, KeyError, TypeError):
+            pass
+    tmp = master.with_suffix(".tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, master)
+    return True
+
+
+def _iter_urls(node: dict):
+    for child in node.get("children", []):
+        if child.get("type") == "url":
+            yield child.get("url")
+        else:
+            yield from _iter_urls(child)
+
+
+def _merge_bookmarks(master: dict, mine: dict) -> bytes:
+    known = {u for root in master["roots"].values() if isinstance(root, dict) for u in _iter_urls(root)}
+    max_id = [0]
+
+    def scan(node):
+        try:
+            max_id[0] = max(max_id[0], int(node.get("id", 0)))
+        except ValueError:
+            pass
+        for c in node.get("children", []):
+            scan(c)
+    for root in master["roots"].values():
+        if isinstance(root, dict):
+            scan(root)
+
+    def renumber(node):
+        max_id[0] += 1
+        node["id"] = str(max_id[0])
+        for c in node.get("children", []):
+            renumber(c)
+
+    for key, root in mine["roots"].items():
+        if not isinstance(root, dict) or key not in master["roots"]:
+            continue
+        for child in root.get("children", []):
+            urls = set(_iter_urls(child)) if child.get("type") != "url" else {child.get("url")}
+            if urls and not urls & known:
+                renumber(child)
+                master["roots"][key].setdefault("children", []).append(child)
+                known |= urls
+    master["checksum"] = ""  # Chromium berekent dit opnieuw
+    return json.dumps(master, indent=3).encode("utf-8")
+
+
 # --------------------------------------------------------------------------- identiteiten
 
 def build_args(chromium: Path, profile: Path, proxy: Proxy | None,
@@ -710,6 +818,7 @@ class Identity:
     process: subprocess.Popen
     tunnel: "VpnTunnel | None" = None
     saved: SavedIdentity | None = None
+    bookmarks_digest: str = ""
 
     def alive(self) -> bool:
         return self.process.poll() is None
@@ -780,6 +889,10 @@ class IdentityManager:
             if proxy is None:
                 cleanup()
                 raise ValueError("Proxy-modus staat aan, maar proxies.txt is leeg.")
+        try:
+            bm_digest = seed_profile(profile)
+        except OSError:
+            bm_digest = ""
         exts = [e.path for e in list_extensions() if e.enabled]
         search_ext = search_extension(self.cfg)
         if search_ext:
@@ -799,7 +912,7 @@ class IdentityManager:
                 tunnel.stop()
             cleanup()
             raise
-        ident = Identity(self.counter, profile, proxy, proc, tunnel, saved)
+        ident = Identity(self.counter, profile, proxy, proc, tunnel, saved, bm_digest)
         self.identities.append(ident)
         return ident
 
@@ -843,7 +956,7 @@ class IdentityManager:
             # Netjes sluiten zodat Chromium cookies/logins wegschrijft.
             if cdp_browser_close(ident.profile):
                 try:
-                    ident.process.wait(timeout=10)
+                    ident.process.wait(timeout=6)
                     return
                 except subprocess.TimeoutExpired:
                     pass
@@ -870,7 +983,10 @@ class IdentityManager:
             pass
 
     def close(self, ident: Identity) -> None:
-        self._stop_browser(ident, graceful=ident.saved is not None)
+        # Altijd netjes sluiten, zodat Chromium bladwijzers (en bij bewaarde
+        # identiteiten ook logins) naar schijf schrijft.
+        self._stop_browser(ident, graceful=True)
+        sync_bookmarks_back(ident.profile, ident.bookmarks_digest)
         if ident.tunnel:
             ident.tunnel.stop()
         if not ident.saved:
@@ -898,6 +1014,7 @@ class IdentityManager:
         if target.exists():
             raise ValueError(f"Er bestaat al een bewaarde identiteit '{name}'.")
         self._stop_browser(ident, graceful=True)
+        sync_bookmarks_back(ident.profile, ident.bookmarks_digest)
         if ident.tunnel:
             ident.tunnel.stop()
         if ident in self.identities:

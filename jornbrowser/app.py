@@ -19,12 +19,21 @@ except ImportError:  # gestart als los script / PyInstaller
 
 
 def open_path(path) -> None:
-    if os.name == "nt":
-        os.startfile(str(path))  # type: ignore[attr-defined]
-    elif sys.platform == "darwin":
-        subprocess.Popen(["open", str(path)])
-    else:
-        subprocess.Popen(["xdg-open", str(path)])
+    """Open een map of bestand in Verkenner. Lukt dat niet: toon het pad."""
+    path = str(path)
+    try:
+        if os.name == "nt":
+            try:
+                os.startfile(path)  # type: ignore[attr-defined]
+            except OSError:
+                subprocess.Popen(["explorer", os.path.normpath(path)])
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", path])
+        else:
+            subprocess.Popen(["xdg-open", path])
+    except OSError as e:
+        messagebox.showinfo("Map openen", f"Kon de map niet automatisch openen ({e}).\n\n"
+                                          f"Open ze zelf in Verkenner:\n{path}")
 
 
 class App(tk.Tk):
@@ -211,6 +220,11 @@ class App(tk.Tk):
         ttk.Label(c2, text="Vinkje = aan. Wijzigingen gelden vanaf de volgende identiteit. "
                            "Tip: hoe minder extensies, hoe minder herkenbaar je bent.",
                   style="CardMuted.TLabel", wraplength=520).pack(anchor="w", pady=(4, 8))
+        ttk.Label(c2, text="Eigen extensie (map met manifest.json)? Kopieer die map naar:",
+                  style="CardMuted.TLabel").pack(anchor="w")
+        self.ext_path_var = tk.StringVar(value=str(core.extensions_dir()))
+        pe = ttk.Entry(c2, textvariable=self.ext_path_var, state="readonly")
+        pe.pack(fill="x", pady=(4, 10))
         self.ext_frame = ttk.Frame(c2, style="Card.TFrame")
         self.ext_frame.pack(fill="both", expand=True)
         self._refresh_extensions()

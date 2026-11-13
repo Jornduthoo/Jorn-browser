@@ -54,6 +54,14 @@ de tijdelijke identiteiten. Verwijderen wist alles van die identiteit.
 
 Bewaarde identiteiten staan in `data\identities\` op je eigen pc.
 
+## Bladwijzers
+
+Je bladwijzers worden **onthouden en gedeeld door alle identiteiten**, ook
+door de tijdelijke. De bladwijzerbalk staat altijd aan.
+- Elke nieuwe identiteit start met je centrale bladwijzerlijst (`data\bookmarks\`).
+- Sluit je een venster, dan gaan je nieuwe of gewijzigde bladwijzers terug naar die lijst.
+- Heb je twee vensters tegelijk open, dan worden nieuwe bladwijzers van beide samengevoegd.
+
 ## Ingebouwde VPN: geen VPN-app nodig
 
 Jorn Browser heeft een ingebouwde VPN (WireGuard, via
@@ -114,4 +122,5 @@ Je privésleutels blijven alleen op je eigen pc, in `data\vpn\`. Deel die map ni
 |---|---|
 | Instellingen, VPN-bestanden, `proxies.txt`, extensies | `data\` naast JornBrowser.exe |
 | Bewaarde identiteiten | `data\identities\` |
+| Bladwijzers (gedeeld) | `data\bookmarks\` |
 | Tijdelijke profielen (worden gewist) | `%TEMP%\JornBrowser\profiles` |

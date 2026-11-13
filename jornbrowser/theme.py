@@ -117,7 +117,8 @@ def apply(root: tk.Tk) -> dict:
               foreground=[("disabled", MUTED)])
     s.configure("TEntry", fieldbackground=PANEL_HI, foreground=TEXT, insertcolor=TEXT,
                 bordercolor=BORDER, lightcolor=BORDER, darkcolor=BORDER, padding=6)
-    s.map("TEntry", bordercolor=[("focus", ACCENT_MID)], lightcolor=[("focus", ACCENT_MID)])
+    s.map("TEntry", bordercolor=[("focus", ACCENT_MID)], lightcolor=[("focus", ACCENT_MID)],
+          fieldbackground=[("readonly", PANEL)], foreground=[("readonly", MUTED)])
     s.configure("TCombobox", fieldbackground=PANEL_HI, background=PANEL_HI, foreground=TEXT,
                 arrowcolor=TEXT, bordercolor=BORDER, lightcolor=BORDER, darkcolor=BORDER, padding=6)
     s.map("TCombobox", fieldbackground=[("readonly", PANEL_HI)], foreground=[("readonly", TEXT)],
