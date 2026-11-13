@@ -33,6 +33,22 @@ Ook inbegrepen:
 
 Heb je Python? Dan kan je ook gewoon `jornbrowser.pyw` dubbelklikken.
 
+## 💾 Identiteit bewaren
+
+Wil je een identiteit houden, bijvoorbeeld omdat je ergens ingelogd bent?
+Klik op **💾 Bewaren** (of Ctrl+S) en geef ze een naam. Dan gebeurt dit:
+
+- Logins, cookies, instellingen en open tabbladen worden onthouden.
+- Ook de **VPN-server** wordt onthouden, dus je komt later terug met hetzelfde IP.
+  Is die server bezet of werkt hij niet, dan neemt Jorn Browser een andere.
+- Je kunt in hetzelfde venster gewoon verder.
+
+Bewaarde identiteiten staan onderaan in het hoofdtabblad: **dubbelklik** om
+er een te openen. "Nieuwe identiteit" raakt ze nooit aan, die wist alleen
+de tijdelijke identiteiten. Verwijderen wist alles van die identiteit.
+
+Bewaarde identiteiten staan in `data\identities\` op je eigen pc.
+
 ## Ingebouwde VPN: geen VPN-app nodig
 
 Jorn Browser heeft een ingebouwde VPN (WireGuard, via
@@ -92,4 +108,5 @@ Je privésleutels blijven alleen op je eigen pc, in `data\vpn\`. Deel die map ni
 | Wat | Waar |
 |---|---|
 | Instellingen, VPN-bestanden, `proxies.txt`, extensies | `data\` naast JornBrowser.exe |
+| Bewaarde identiteiten | `data\\identities\\` |
 | Tijdelijke profielen (worden gewist) | `%TEMP%\JornBrowser\profiles` |

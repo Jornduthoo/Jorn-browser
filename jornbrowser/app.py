@@ -7,7 +7,7 @@ import subprocess
 import sys
 import threading
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
 try:
     from . import core
@@ -28,7 +28,7 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Jorn Browser")
-        self.geometry("560x520")
+        self.geometry("600x600")
         self.minsize(480, 440)
         self.cfg = core.load_config()
         self.mgr = core.IdentityManager(self.cfg)
@@ -45,6 +45,8 @@ class App(tk.Tk):
 
         self.bind_all("<Control-n>", lambda e: self.new_identity())
         self.bind_all("<Control-N>", lambda e: self.new_identity())
+        self.bind_all("<Control-s>", lambda e: self.save_identity())
+        self.bind_all("<Control-S>", lambda e: self.save_identity())
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.after(1000, self._tick)
 
@@ -58,22 +60,38 @@ class App(tk.Tk):
         style = ttk.Style(self)
         style.configure("Big.TButton", font=("Segoe UI", 14, "bold"), padding=12)
 
-        ttk.Button(f, text="🔄  Nieuwe identiteit  (Ctrl+N)", style="Big.TButton",
-                   command=self.new_identity).pack(fill="x")
-        ttk.Label(f, text="Sluit alle vensters, wist cookies/cache/geschiedenis en start "
-                          "opnieuw met een vers profiel (en een andere proxy als die aan staat).",
-                  wraplength=500, foreground="#555").pack(fill="x", pady=(6, 12))
+        top = ttk.Frame(f)
+        top.pack(fill="x")
+        top.columnconfigure(0, weight=3)
+        top.columnconfigure(1, weight=2)
+        ttk.Button(top, text="🔄  Nieuwe identiteit  (Ctrl+N)", style="Big.TButton",
+                   command=self.new_identity).grid(row=0, column=0, sticky="ew")
+        ttk.Button(top, text="💾  Bewaren  (Ctrl+S)", style="Big.TButton",
+                   command=self.save_identity).grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        ttk.Label(f, text="Nieuwe identiteit: alles wissen en opnieuw beginnen met een ander IP.  "
+                          "Bewaren: deze identiteit onthouden (logins, cookies en dezelfde VPN-server).",
+                  wraplength=520, foreground="#555").pack(fill="x", pady=(6, 10))
 
         row = ttk.Frame(f)
         row.pack(fill="x")
-        ttk.Button(row, text="➕ Extra identiteit (apart venster)", command=self.extra_identity).pack(side="left")
+        ttk.Button(row, text="➕ Extra identiteit", command=self.extra_identity).pack(side="left")
         ttk.Button(row, text="🌐 Toon mijn IP", command=self.show_ip).pack(side="left", padx=6)
-        ttk.Button(row, text="✖ Alles sluiten & wissen", command=self.close_all).pack(side="right")
+        ttk.Button(row, text="✖ Alles sluiten", command=self.close_all).pack(side="right")
 
-        ttk.Label(f, text="Actieve identiteiten:").pack(anchor="w", pady=(14, 2))
-        self.ident_list = tk.Listbox(f, height=8)
-        self.ident_list.pack(fill="both", expand=True)
-        ttk.Button(f, text="Geselecteerde sluiten & wissen", command=self.close_selected).pack(anchor="e", pady=(6, 0))
+        ttk.Label(f, text="Open:").pack(anchor="w", pady=(10, 2))
+        self.ident_list = tk.Listbox(f, height=4)
+        self.ident_list.pack(fill="x")
+        ttk.Button(f, text="Geselecteerde sluiten", command=self.close_selected).pack(anchor="e", pady=(4, 0))
+
+        ttk.Label(f, text="💾 Bewaarde identiteiten (dubbelklik om te openen):").pack(anchor="w", pady=(6, 2))
+        self.saved_list = tk.Listbox(f, height=5)
+        self.saved_list.pack(fill="both", expand=True)
+        self.saved_list.bind("<Double-Button-1>", lambda e: self.open_saved())
+        srow = ttk.Frame(f)
+        srow.pack(fill="x", pady=(4, 0))
+        ttk.Button(srow, text="Openen", command=self.open_saved).pack(side="left")
+        ttk.Button(srow, text="Verwijderen", command=self.delete_saved).pack(side="right")
+        self._refresh_saved()
         return f
 
     def _build_network(self, parent):
@@ -210,6 +228,55 @@ class App(tk.Tk):
     def extra_identity(self):
         self._run_bg(self.mgr.spawn, lambda i: f"✔ Extra: {i.describe()}", "Extra identiteit starten…")
 
+    def save_identity(self):
+        """Eén klik: de open identiteit onthouden en meteen verder gebruiken."""
+        unsaved = [i for i in self.mgr.identities if not i.saved]
+        if not unsaved:
+            messagebox.showinfo("Bewaren", "Er is geen open (niet-bewaarde) identiteit om te bewaren.\n"
+                                           "Klik eerst op 'Nieuwe identiteit'.")
+            return
+        sel = self.ident_list.curselection()
+        ident = self.mgr.identities[sel[0]] if sel else unsaved[-1]
+        if ident.saved:
+            ident = unsaved[-1]
+        default = f"Identiteit {len(core.list_saved_identities()) + 1}"
+        name = simpledialog.askstring("Bewaren", "Naam voor deze identiteit:", initialvalue=default, parent=self)
+        if not name:
+            return
+        self._run_bg(lambda: self.mgr.save(ident, name),
+                     lambda i: f"💾 Bewaard: {i.describe()}", "Bewaren…")
+
+    def _selected_saved(self):
+        sel = self.saved_list.curselection()
+        saved = core.list_saved_identities()
+        if not sel or sel[0] >= len(saved):
+            messagebox.showinfo("Bewaarde identiteiten", "Selecteer eerst een bewaarde identiteit.")
+            return None
+        return saved[sel[0]]
+
+    def open_saved(self):
+        si = self._selected_saved()
+        if si:
+            self._run_bg(lambda: self.mgr.open_saved(si), lambda i: f"✔ {i.describe()}", f"'{si.name}' openen…")
+
+    def delete_saved(self):
+        si = self._selected_saved()
+        if not si:
+            return
+        if any(i.saved and i.saved.path == si.path for i in self.mgr.identities):
+            messagebox.showwarning("Verwijderen", f"Sluit '{si.name}' eerst.")
+            return
+        if messagebox.askyesno("Verwijderen", f"'{si.name}' en al haar logins/cookies definitief wissen?"):
+            core.delete_saved_identity(si)
+            self._refresh_saved()
+            self.status.set(f"'{si.name}' gewist.")
+
+    def _refresh_saved(self):
+        self.saved_list.delete(0, "end")
+        open_paths = {i.saved.path for i in self.mgr.identities if i.saved}
+        for si in core.list_saved_identities():
+            self.saved_list.insert("end", ("🟢 " if si.path in open_paths else "") + si.describe())
+
     def close_all(self):
         self._run(self.mgr.close_all, "Alle identiteiten gesloten en gewist.")
 
@@ -335,6 +402,7 @@ class App(tk.Tk):
         self.ident_list.delete(0, "end")
         for ident in self.mgr.identities:
             self.ident_list.insert("end", ident.describe())
+        self._refresh_saved()
 
     def _tick(self):
         if not getattr(self, "_busy", False) and self.mgr.reap():

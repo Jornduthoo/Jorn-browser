@@ -511,6 +511,9 @@ def build_args(chromium: Path, profile: Path, proxy: Proxy | None,
         "--no-default-browser-check",
         "--disable-sync",
         "--new-window",
+        # Lokale besturingspoort (willekeurig) zodat we netjes kunnen sluiten
+        # bij "Bewaren"; webpagina's kunnen hier niet bij.
+        "--remote-debugging-port=0",
     ]
     disable_features = []
     if extensions:
@@ -531,6 +534,36 @@ def build_args(chromium: Path, profile: Path, proxy: Proxy | None,
     return args
 
 
+def cdp_browser_close(profile: Path, timeout: float = 3) -> bool:
+    """Vraag Chromium netjes te sluiten (Browser.close via DevTools), zodat het
+    cookies/logins naar schijf schrijft. De poort is alleen lokaal en willekeurig
+    (--remote-debugging-port=0); webpagina's kunnen er niet bij (origin-check)."""
+    import base64
+    import socket
+    try:
+        port_s, path = (profile / "DevToolsActivePort").read_text(encoding="utf-8").split()[:2]
+        port = int(port_s)
+        with socket.create_connection(("127.0.0.1", port), timeout=timeout) as s:
+            s.settimeout(timeout)
+            key = base64.b64encode(os.urandom(16)).decode()
+            s.sendall((f"GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nUpgrade: websocket\r\n"
+                       f"Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\n"
+                       "Sec-WebSocket-Version: 13\r\n\r\n").encode())
+            if b" 101 " not in s.recv(4096).split(b"\r\n", 1)[0]:
+                return False
+            msg = json.dumps({"id": 1, "method": "Browser.close"}).encode()
+            mask = os.urandom(4)
+            s.sendall(bytes([0x81, 0x80 | len(msg)]) + mask
+                      + bytes(b ^ mask[i % 4] for i, b in enumerate(msg)))
+            try:
+                s.recv(4096)
+            except OSError:
+                pass
+        return True
+    except (OSError, ValueError):
+        return False
+
+
 def wipe_dir(path: Path, attempts: int = 20) -> bool:
     for _ in range(attempts):
         shutil.rmtree(path, ignore_errors=True)
@@ -540,6 +573,64 @@ def wipe_dir(path: Path, attempts: int = 20) -> bool:
     return False
 
 
+# --------------------------------------------------------------------------- bewaarde identiteiten
+#
+# Een bewaarde identiteit = een profiel dat NIET gewist wordt (logins, cookies,
+# instellingen blijven) + de VPN-server/proxy die ze gebruikte (zelfde IP).
+
+SAFE_NAME_RE = re.compile(r"^[\w\- .]{1,40}$")
+
+
+def identities_dir() -> Path:
+    d = data_dir() / "identities"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+@dataclass
+class SavedIdentity:
+    name: str
+    path: Path
+    vpn: str = ""     # bestandsnaam in data/vpn (bv. "Belgie.conf")
+    proxy: str = ""   # proxy-URL bij proxylijst-modus
+
+    @property
+    def profile(self) -> Path:
+        return self.path / "profile"
+
+    def describe(self) -> str:
+        via = f"VPN {Path(self.vpn).stem}" if self.vpn else (self.proxy or "geen VPN")
+        return f"{self.name}  ({via})"
+
+
+def _write_meta(si: SavedIdentity) -> None:
+    (si.path / "identity.json").write_text(
+        json.dumps({"name": si.name, "vpn": si.vpn, "proxy": si.proxy}, indent=2), encoding="utf-8")
+
+
+def list_saved_identities() -> list[SavedIdentity]:
+    out = []
+    for d in sorted(identities_dir().iterdir(), key=lambda p: p.name.lower()):
+        if not d.is_dir():
+            continue
+        try:
+            meta = json.loads((d / "identity.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            meta = {}
+        out.append(SavedIdentity(meta.get("name", d.name), d, meta.get("vpn", ""), meta.get("proxy", "")))
+    return out
+
+
+def get_saved_identity(name: str) -> SavedIdentity | None:
+    return next((s for s in list_saved_identities() if s.name == name), None)
+
+
+def delete_saved_identity(si: SavedIdentity) -> None:
+    wipe_dir(si.path)
+
+
+# --------------------------------------------------------------------------- identiteiten
+
 @dataclass
 class Identity:
     number: int
@@ -547,6 +638,7 @@ class Identity:
     proxy: Proxy | None
     process: subprocess.Popen
     tunnel: "VpnTunnel | None" = None
+    saved: SavedIdentity | None = None
 
     def alive(self) -> bool:
         return self.process.poll() is None
@@ -556,7 +648,8 @@ class Identity:
             via = f"VPN {self.tunnel.name}"
         else:
             via = self.proxy.display() if self.proxy else "systeem-VPN / directe verbinding"
-        return f"Identiteit #{self.number} via {via}"
+        who = f"💾 {self.saved.name}" if self.saved else f"Identiteit #{self.number}"
+        return f"{who} via {via}"
 
 
 @dataclass
@@ -570,37 +663,58 @@ class IdentityManager:
         self.cleanup_leftovers()
 
     def cleanup_leftovers(self) -> None:
-        """Wis profielen die een vorige sessie (bv. na een crash) achterliet."""
+        """Wis tijdelijke profielen die een vorige sessie (bv. na een crash) achterliet."""
         active = {i.profile for i in self.identities}
         for d in profiles_root().iterdir():
             if d not in active:
                 wipe_dir(d, attempts=1)
 
-    def spawn(self, url: str | None = None) -> Identity:
+    def spawn(self, url: str | None = None, saved: SavedIdentity | None = None) -> Identity:
         chromium = find_chromium(self.cfg)
         if not chromium:
             raise FileNotFoundError("Chromium niet gevonden. Kies chrome.exe via Instellingen.")
+        if saved and any(i.saved and i.saved.path == saved.path for i in self.identities):
+            raise ValueError(f"'{saved.name}' is al open.")
+        self.counter += 1
+        if saved:
+            profile = saved.profile
+            profile.mkdir(parents=True, exist_ok=True)
+        else:
+            profile = Path(tempfile.mkdtemp(prefix=f"id{self.counter}-", dir=profiles_root()))
+
+        def cleanup():
+            if not saved:
+                wipe_dir(profile)
+
         proxy = None
         tunnel = None
-        self.counter += 1
-        profile = Path(tempfile.mkdtemp(prefix=f"id{self.counter}-", dir=profiles_root()))
-        if self.cfg.get("proxy_mode") == "vpn":
+        mode = self.cfg.get("proxy_mode")
+        if saved and saved.vpn:
+            mode = "vpn"
+        elif saved and saved.proxy:
+            mode = "list"
+        if mode == "vpn":
             try:
-                tunnel = self._start_tunnel(profile)
+                tunnel = self._start_tunnel(profile, prefer=saved.vpn if saved else "")
             except Exception:
-                wipe_dir(profile)
+                cleanup()
                 raise
             proxy = tunnel.proxy
-        elif self.cfg.get("proxy_mode") == "list":
-            self.picker.order = self.cfg.get("proxy_order", "random")
-            proxy = self.picker.pick(load_proxies())
+        elif mode == "list":
+            proxies = load_proxies()
+            proxy = next((p for p in proxies if saved and p.url == saved.proxy), None)
             if proxy is None:
-                wipe_dir(profile)
+                self.picker.order = self.cfg.get("proxy_order", "random")
+                proxy = self.picker.pick(proxies)
+            if proxy is None:
+                cleanup()
                 raise ValueError("Proxy-modus staat aan, maar proxies.txt is leeg.")
         exts = [e.path for e in list_extensions() if e.enabled]
         args = build_args(chromium, profile, proxy, exts, self.cfg)
         if url:
             args[-1] = url
+        elif saved:
+            args.pop()  # bewaarde identiteit: Chromium herstelt zelf haar tabbladen/startpagina
         kwargs = {}
         if os.name == "nt":
             kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
@@ -609,13 +723,13 @@ class IdentityManager:
         except Exception:
             if tunnel:
                 tunnel.stop()
-            wipe_dir(profile)
+            cleanup()
             raise
-        ident = Identity(self.counter, profile, proxy, proc, tunnel)
+        ident = Identity(self.counter, profile, proxy, proc, tunnel, saved)
         self.identities.append(ident)
         return ident
 
-    def _start_tunnel(self, profile: Path) -> VpnTunnel:
+    def _start_tunnel(self, profile: Path, prefer: str = "") -> VpnTunnel:
         configs = list_vpn_configs()
         if not configs:
             raise ValueError("Nog geen VPN-servers. Voeg WireGuard-bestanden (.conf) toe "
@@ -625,9 +739,18 @@ class IdentityManager:
         if not free:
             raise ValueError("Alle VPN-servers zijn al in gebruik door een open identiteit. "
                              "Voeg meer .conf-bestanden toe of sluit een identiteit.")
-        self.picker.order = self.cfg.get("proxy_order", "random")
         tried: list[str] = []
-        for _ in range(min(3, len(free))):  # werkt een server niet? probeer de volgende
+        preferred = next((c for c in free if c.name == prefer), None) if prefer else None
+        if preferred:  # bewaarde identiteit: eerst haar eigen server (= zelfde IP)
+            tried.append(str(preferred))
+            tunnel = VpnTunnel(preferred, profile)
+            try:
+                tunnel.start()
+                return tunnel
+            except ConnectionError:
+                pass
+        self.picker.order = self.cfg.get("proxy_order", "random")
+        for _ in range(min(3, len(free) - len(tried))):  # werkt een server niet? volgende
             choice = self.picker.pick([Proxy(str(c)) for c in free if str(c) not in tried])
             tried.append(choice.url)
             tunnel = VpnTunnel(Path(choice.url), profile)
@@ -639,22 +762,45 @@ class IdentityManager:
         raise ConnectionError("Geen verbinding met de VPN (geprobeerd: "
                               + ", ".join(Path(t).stem for t in tried) + ").")
 
-    def close(self, ident: Identity) -> None:
-        if ident.alive():
+    def _stop_browser(self, ident: Identity, graceful: bool) -> None:
+        if not ident.alive():
+            return
+        if graceful:
+            # Netjes sluiten zodat Chromium cookies/logins wegschrijft.
+            if cdp_browser_close(ident.profile):
+                try:
+                    ident.process.wait(timeout=10)
+                    return
+                except subprocess.TimeoutExpired:
+                    pass
             if os.name == "nt":
-                # Hele procesboom van Chromium afsluiten.
-                subprocess.run(["taskkill", "/F", "/T", "/PID", str(ident.process.pid)],
+                subprocess.run(["taskkill", "/T", "/PID", str(ident.process.pid)],
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             else:
                 ident.process.terminate()
             try:
-                ident.process.wait(timeout=5)
+                ident.process.wait(timeout=8)
+                return
             except subprocess.TimeoutExpired:
-                ident.process.kill()
+                pass
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(ident.process.pid)],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        else:
+            ident.process.kill()
+        try:
+            ident.process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+
+    def close(self, ident: Identity) -> None:
+        self._stop_browser(ident, graceful=ident.saved is not None)
         if ident.tunnel:
             ident.tunnel.stop()
-        wipe_dir(ident.profile)
+        if not ident.saved:
+            wipe_dir(ident.profile)
         if ident in self.identities:
             self.identities.remove(ident)
 
@@ -663,9 +809,45 @@ class IdentityManager:
             self.close(ident)
 
     def new_identity(self, url: str | None = None) -> Identity:
-        """Alles sluiten en wissen, dan één verse identiteit starten."""
+        """Alles sluiten (tijdelijke profielen wissen), dan één verse identiteit starten."""
         self.close_all()
         return self.spawn(url)
+
+    def save(self, ident: Identity, name: str) -> Identity:
+        """Bewaar een open identiteit (logins, cookies, VPN-server) en heropen ze meteen."""
+        name = name.strip()
+        if not SAFE_NAME_RE.match(name):
+            raise ValueError("Gebruik een naam met alleen letters, cijfers, spaties, - of _ (max 40).")
+        if ident.saved:
+            raise ValueError(f"Deze identiteit is al bewaard als '{ident.saved.name}'.")
+        target = identities_dir() / name
+        if target.exists():
+            raise ValueError(f"Er bestaat al een bewaarde identiteit '{name}'.")
+        self._stop_browser(ident, graceful=True)
+        if ident.tunnel:
+            ident.tunnel.stop()
+        if ident in self.identities:
+            self.identities.remove(ident)
+        target.mkdir(parents=True)
+        for _ in range(20):  # Windows laat bestanden soms even vast na het sluiten
+            try:
+                shutil.move(str(ident.profile), str(target / "profile"))
+                break
+            except OSError:
+                time.sleep(0.2)
+        else:
+            shutil.copytree(ident.profile, target / "profile", dirs_exist_ok=True)
+            wipe_dir(ident.profile)
+        si = SavedIdentity(
+            name, target,
+            vpn=ident.tunnel.conf.name if ident.tunnel else "",
+            proxy=ident.proxy.url if (ident.proxy and not ident.tunnel) else "",
+        )
+        _write_meta(si)
+        return self.spawn(saved=si)
+
+    def open_saved(self, si: SavedIdentity) -> Identity:
+        return self.spawn(saved=si)
 
     def reap(self) -> list[Identity]:
         """Ruim identiteiten op waarvan de gebruiker het venster zelf sloot."""
