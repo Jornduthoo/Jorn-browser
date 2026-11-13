@@ -70,6 +70,7 @@ door de tijdelijke. De bladwijzerbalk staat altijd aan.
 - Elke nieuwe identiteit start met je centrale bladwijzerlijst (`data\bookmarks\`).
 - Sluit je een venster, dan gaan je nieuwe of gewijzigde bladwijzers terug naar die lijst.
 - Heb je twee vensters tegelijk open, dan worden nieuwe bladwijzers van beide samengevoegd.
+- Ook **vastgezette extensies** (het punaise-icoon in de werkbalk) blijven vastgezet in elke nieuwe identiteit.
 
 ## Ingebouwde VPN: geen VPN-app nodig
 

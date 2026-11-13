@@ -460,11 +460,32 @@ def wireproxy_config(wg_text: str, port: int) -> str:
     return sanitize_wg_config(wg_text) + f"\n[Socks5]\nBindAddress = 127.0.0.1:{port}\n"
 
 
+def _stable_wireproxy(bundled: Path) -> Path:
+    """Kopieer de meegebundelde wireproxy naar een VASTE plek (data/bin).
+    De bundel staat elke start in een andere tijdelijke map (_MEIxxxx), waardoor
+    Windows Firewall telkens opnieuw toestemming zou vragen."""
+    import hashlib
+    target = data_dir() / "bin" / bundled.name
+    try:
+        want = hashlib.sha256(bundled.read_bytes()).hexdigest()
+        if not target.is_file() or hashlib.sha256(target.read_bytes()).hexdigest() != want:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            tmp = target.with_suffix(".tmp")
+            shutil.copy2(bundled, tmp)
+            os.replace(tmp, target)
+        return target
+    except OSError:
+        # bv. bestand in gebruik door een open tunnel: gebruik wat er al staat
+        return target if target.is_file() else bundled
+
+
 def find_wireproxy() -> Path | None:
     exe = "wireproxy.exe" if os.name == "nt" else "wireproxy"
     cands = []
     if getattr(sys, "_MEIPASS", None):  # meegebundeld in JornBrowser.exe
-        cands.append(Path(sys._MEIPASS) / exe)
+        bundled = Path(sys._MEIPASS) / exe
+        if bundled.is_file():
+            return _stable_wireproxy(bundled)
     cands += [app_dir() / exe, app_dir() / "bin" / exe]
     for c in cands:
         if c.is_file():
@@ -607,10 +628,44 @@ def seed_profile(profile: Path) -> str:
         prefs = json.loads(prefs_path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         prefs = {}
+    changed = False
     if prefs.get("bookmark_bar", {}).get("show_on_all_tabs") is not True:
         prefs.setdefault("bookmark_bar", {})["show_on_all_tabs"] = True
+        changed = True
+    pinned = load_pinned_extensions()
+    if pinned and prefs.get("extensions", {}).get("pinned_extensions") != pinned:
+        prefs.setdefault("extensions", {})["pinned_extensions"] = pinned
+        changed = True
+    if changed:
         prefs_path.write_text(json.dumps(prefs), encoding="utf-8")
     return digest
+
+
+# Vastgezette extensies (werkbalk) worden centraal onthouden, zoals bladwijzers.
+
+def pinned_path() -> Path:
+    return data_dir() / "pinned_extensions.json"
+
+
+def load_pinned_extensions() -> list[str]:
+    try:
+        data = json.loads(pinned_path().read_text(encoding="utf-8"))
+        return [x for x in data if isinstance(x, str)]
+    except (OSError, ValueError, TypeError):
+        return []
+
+
+def sync_pinned_back(profile: Path) -> bool:
+    """Lees na het sluiten welke extensies vastgezet waren en onthoud dat."""
+    try:
+        prefs = json.loads((profile / "Default" / "Preferences").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    pinned = prefs.get("extensions", {}).get("pinned_extensions")
+    if not isinstance(pinned, list) or pinned == load_pinned_extensions():
+        return False
+    pinned_path().write_text(json.dumps(pinned), encoding="utf-8")
+    return True
 
 
 def sync_bookmarks_back(profile: Path, start_digest: str) -> bool:
@@ -993,6 +1048,7 @@ class IdentityManager:
         # identiteiten ook logins) naar schijf schrijft.
         self._stop_browser(ident, graceful=True)
         sync_bookmarks_back(ident.profile, ident.bookmarks_digest)
+        sync_pinned_back(ident.profile)
         if ident.tunnel:
             ident.tunnel.stop()
         if not ident.saved:
@@ -1021,6 +1077,7 @@ class IdentityManager:
             raise ValueError(f"Er bestaat al een bewaarde identiteit '{name}'.")
         self._stop_browser(ident, graceful=True)
         sync_bookmarks_back(ident.profile, ident.bookmarks_digest)
+        sync_pinned_back(ident.profile)
         if ident.tunnel:
             ident.tunnel.stop()
         if ident in self.identities:
