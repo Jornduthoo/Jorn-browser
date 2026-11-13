@@ -100,7 +100,13 @@ def install_and_restart(new_exe: Path) -> None:
     except OSError:
         os.replace(old, exe)  # terugdraaien
         raise
-    subprocess.Popen([str(exe)], cwd=str(exe.parent),
+    # Belangrijk: de nieuwe exe mag NIET de omgeving van deze (PyInstaller-)
+    # versie erven, anders gebruikt ze onze tijdelijke _MEI-map, die gewist
+    # wordt zodra wij afsluiten (dan ontbreekt o.a. wireproxy).
+    env = {k: v for k, v in os.environ.items()
+           if not (k.startswith("_PYI") or k.startswith("_MEI"))}
+    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    subprocess.Popen([str(exe)], cwd=str(exe.parent), env=env,
                      creationflags=getattr(subprocess, "DETACHED_PROCESS", 0))
 
 

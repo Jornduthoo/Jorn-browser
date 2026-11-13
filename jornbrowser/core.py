@@ -486,7 +486,8 @@ def find_wireproxy() -> Path | None:
         bundled = Path(sys._MEIPASS) / exe
         if bundled.is_file():
             return _stable_wireproxy(bundled)
-    cands += [app_dir() / exe, app_dir() / "bin" / exe]
+    # Vangnet: de vaste kopie van een vorige start (data/bin)
+    cands += [data_dir() / "bin" / exe, app_dir() / exe, app_dir() / "bin" / exe]
     for c in cands:
         if c.is_file():
             return c
