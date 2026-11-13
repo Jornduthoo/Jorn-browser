@@ -108,5 +108,5 @@ Je privésleutels blijven alleen op je eigen pc, in `data\vpn\`. Deel die map ni
 | Wat | Waar |
 |---|---|
 | Instellingen, VPN-bestanden, `proxies.txt`, extensies | `data\` naast JornBrowser.exe |
-| Bewaarde identiteiten | `data\\identities\\` |
+| Bewaarde identiteiten | `data\identities\` |
 | Tijdelijke profielen (worden gewist) | `%TEMP%\JornBrowser\profiles` |
