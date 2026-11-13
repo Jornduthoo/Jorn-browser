@@ -763,12 +763,14 @@ def _merge_bookmarks(master: dict, mine: dict) -> bytes:
     return json.dumps(master, indent=3).encode("utf-8")
 
 
-# Sjabloon voor extensie-instellingen: één vast profiel waarin je je extensies
-# instelt. Nieuwe tijdelijke identiteiten starten met een KOPIE van die
-# instellingen; wijzigingen in een tijdelijke identiteit gaan niet terug naar
-# het sjabloon (elke identiteit begint dus opnieuw vanuit het sjabloon).
+# Sjabloon voor extensie-instellingen: één vast profiel met de instellingen van
+# je extensies. Nieuwe tijdelijke identiteiten starten met een KOPIE daarvan.
+# Pas je een extensie aan in een tijdelijke identiteit, dan gaat die wijziging
+# bij het sluiten terug naar het sjabloon (zoals bladwijzers en vastgezette
+# extensies). Alleen extensie-opslag gaat mee, nooit cookies of websitedata.
 
 TEMPLATE_STATE_DIRS = ("Local Extension Settings", "Sync Extension Settings")
+_STATE_IGNORE = ("LOCK", "LOG", "LOG.old")
 
 
 def template_identity() -> "SavedIdentity":
@@ -777,23 +779,69 @@ def template_identity() -> "SavedIdentity":
     return SavedIdentity("Extensies instellen", d)
 
 
+def _ext_state_units(default: Path) -> list[str]:
+    """Opslagmappen van extensies in een profiel (één per extensie per soort)."""
+    out = []
+    for name in TEMPLATE_STATE_DIRS:
+        if (default / name).is_dir():
+            out += [f"{name}/{d.name}" for d in (default / name).iterdir()
+                    if d.is_dir() and not d.name.startswith(".")]
+    if (default / "IndexedDB").is_dir():
+        out += [f"IndexedDB/{d.name}" for d in (default / "IndexedDB").iterdir()
+                if d.is_dir() and d.name.startswith("chrome-extension_")]
+    return sorted(out)
+
+
+def _unit_digest(path: Path) -> str:
+    if not path.is_dir():
+        return ""
+    import hashlib
+    h = hashlib.sha256()
+    for f in sorted(p for p in path.rglob("*") if p.is_file() and p.name not in _STATE_IGNORE):
+        h.update(str(f.relative_to(path)).encode() + b"\0")
+        try:
+            h.update(f.read_bytes())
+        except OSError:
+            pass
+    return h.hexdigest()
+
+
+def template_state_digests() -> dict[str, str]:
+    default = template_identity().profile / "Default"
+    return {u: _unit_digest(default / u) for u in _ext_state_units(default)}
+
+
 def apply_template(profile: Path) -> int:
     """Kopieer de extensie-instellingen van het sjabloon naar een nieuw profiel."""
     src = template_identity().profile / "Default"
     dst = profile / "Default"
+    units = _ext_state_units(src)
+    for u in units:
+        shutil.copytree(src / u, dst / u, dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns(*_STATE_IGNORE))
+    return len(units)
+
+
+def sync_extension_state_back(profile: Path, base: dict[str, str]) -> int:
+    """Schrijf extensie-instellingen van een gesloten tijdelijke identiteit terug
+    naar het sjabloon. `base` = toestand van het sjabloon bij de start van die
+    identiteit: werd een extensie intussen elders aangepast, dan laten we die staan."""
+    src = profile / "Default"
+    dst = template_identity().profile / "Default"
     n = 0
-    for name in TEMPLATE_STATE_DIRS:
-        if (src / name).is_dir():
-            shutil.copytree(src / name, dst / name, dirs_exist_ok=True,
-                            ignore=shutil.ignore_patterns("LOCK"))
-            n += 1
-    idb = src / "IndexedDB"
-    if idb.is_dir():
-        for d in idb.iterdir():
-            if d.name.startswith("chrome-extension_"):
-                shutil.copytree(d, dst / "IndexedDB" / d.name, dirs_exist_ok=True,
-                                ignore=shutil.ignore_patterns("LOCK"))
-                n += 1
+    for u in _ext_state_units(src):
+        current = _unit_digest(dst / u)
+        if current != base.get(u, ""):
+            log(f"extensie-instellingen {u}: intussen elders gewijzigd, niet overschreven")
+            continue
+        if _unit_digest(src / u) == current:
+            continue
+        tmp = (dst / u).parent / (".tmp-" + (dst / u).name)
+        shutil.rmtree(tmp, ignore_errors=True)
+        shutil.copytree(src / u, tmp, ignore=shutil.ignore_patterns(*_STATE_IGNORE))
+        shutil.rmtree(dst / u, ignore_errors=True)
+        os.replace(tmp, dst / u)
+        n += 1
     return n
 
 
@@ -939,6 +987,7 @@ class Identity:
     tunnel: "VpnTunnel | None" = None
     saved: SavedIdentity | None = None
     bookmarks_digest: str = ""
+    ext_state_base: dict | None = None  # sjabloon bij de start (alleen tijdelijke identiteiten)
 
     def alive(self) -> bool:
         return self.process.poll() is None
@@ -1013,15 +1062,16 @@ class IdentityManager:
             bm_digest = seed_profile(profile)
         except OSError:
             bm_digest = ""
+        ext_base = None
         if not saved:  # alleen tijdelijke identiteiten starten vanuit het sjabloon
-            template_open = any(i.saved and i.saved.path == template_identity().path
-                                for i in self.identities)
-            if template_open:
+            if self._template_open():
                 log("sjabloon is open: nieuwe identiteit start zonder extensie-instellingen")
             else:
                 try:
+                    ext_base = template_state_digests()
                     log(f"sjabloon toegepast: {apply_template(profile)} onderdelen")
                 except OSError as e:
+                    ext_base = None
                     log(f"sjabloon toepassen mislukt: {e}")
         exts = [e.path for e in list_extensions() if e.enabled]
         search_ext = search_extension(self.cfg)
@@ -1042,9 +1092,23 @@ class IdentityManager:
                 tunnel.stop()
             cleanup()
             raise
-        ident = Identity(self.counter, profile, proxy, proc, tunnel, saved, bm_digest)
+        ident = Identity(self.counter, profile, proxy, proc, tunnel, saved, bm_digest, ext_base)
         self.identities.append(ident)
         return ident
+
+    def _template_open(self) -> bool:
+        return any(i.saved and i.saved.path == template_identity().path for i in self.identities)
+
+    def _sync_extension_state(self, ident: Identity) -> None:
+        if ident.ext_state_base is None:
+            return
+        if self._template_open():
+            log("sjabloon is open: extensie-instellingen van dit venster niet onthouden")
+            return
+        try:
+            log(f"extensie-instellingen onthouden: {sync_extension_state_back(ident.profile, ident.ext_state_base)} gewijzigd")
+        except OSError as e:
+            log(f"extensie-instellingen onthouden mislukt: {e}")
 
     def _start_tunnel(self, profile: Path, prefer: str = "") -> VpnTunnel:
         configs = list_vpn_configs()
@@ -1121,6 +1185,7 @@ class IdentityManager:
         self._stop_browser(ident, graceful=True)
         sync_bookmarks_back(ident.profile, ident.bookmarks_digest)
         sync_pinned_back(ident.profile)
+        self._sync_extension_state(ident)
         if ident.tunnel:
             ident.tunnel.stop()
         if not ident.saved:
@@ -1150,6 +1215,7 @@ class IdentityManager:
         self._stop_browser(ident, graceful=True)
         sync_bookmarks_back(ident.profile, ident.bookmarks_digest)
         sync_pinned_back(ident.profile)
+        self._sync_extension_state(ident)
         if ident.tunnel:
             ident.tunnel.stop()
         if ident in self.identities:

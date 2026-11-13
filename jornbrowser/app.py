@@ -311,9 +311,9 @@ class App(tk.Tk):
         trow.pack(fill="x")
         ttk.Label(trow, text="Instellingen van extensies", style="CardTitle.TLabel").pack(side="left")
         ttk.Button(trow, text="⚙ Extensies instellen", command=self.open_template).pack(side="right")
-        ttk.Label(ct, text="Stel je extensies hier één keer in (thema, weergave, tools). Elke nieuwe "
-                           "identiteit start met die instellingen. Wijzigingen in een gewone identiteit "
-                           "worden niet onthouden: pas ze hier aan.",
+        ttk.Label(ct, text="Instellingen van je extensies (thema, weergave, tools) worden onthouden: "
+                           "pas je iets aan in een venster, dan start elke nieuwe identiteit daarmee. "
+                           "Hier kan je ze ook apart instellen. Cookies en websitedata gaan nooit mee.",
                   style="CardMuted.TLabel", wraplength=520).pack(anchor="w", pady=(4, 0))
 
         c2 = T.card(f)

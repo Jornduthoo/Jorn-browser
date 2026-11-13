@@ -74,13 +74,15 @@ door de tijdelijke. De bladwijzerbalk staat altijd aan.
 
 ## ⚙ Extensies instellen (sjabloon)
 
-Extensies (weergave, thema, klas- en presentatietools) stel je één keer in:
-1. Tabblad **Extensies**, dan **⚙ Extensies instellen**. Er opent een apart venster.
-2. Stel daar je extensies in zoals je ze wilt en sluit het venster.
-3. Elke nieuwe identiteit start voortaan met die instellingen.
-
-Wat je in een gewone identiteit aan een extensie verandert, wordt bij
-"Nieuwe identiteit" gewist. Wil je iets blijvend aanpassen, doe het in het sjabloon.
+Instellingen van extensies (weergave, thema, klas- en presentatietools) worden
+**onthouden**, net als vastgezette extensies:
+- Pas je een extensie aan in een venster, dan gaat die instelling bij het sluiten
+  terug naar het sjabloon. Elke nieuwe identiteit start daarmee.
+- Je kan ze ook apart instellen: tabblad **Extensies**, dan **⚙ Extensies instellen**.
+  Er opent een apart venster; stel alles in en sluit het.
+- Alleen de opslag van extensies gaat mee, nooit cookies, logins of websitedata.
+- Heb je twee vensters tegelijk open en pas je in beide dezelfde extensie aan,
+  dan wint het venster dat het eerst sluit.
 
 ## Ingebouwde VPN: geen VPN-app nodig
 
