@@ -122,13 +122,15 @@ class App(tk.Tk):
             w.destroy()
         tk.Label(b, text=f"  ★  Nieuwe versie {info['version']} beschikbaar", bg=T.ACCENT_MID, fg="#ffffff",
                  font=self.F["bold"], pady=8).pack(side="left")
-        self.update_btn = tk.Label(b, text="  Nu bijwerken  ", bg="#ffffff", fg=T.ACCENT_MID,
+        # Vaste breedte: de knop verspringt niet als de tekst verandert.
+        self.update_btn = tk.Label(b, text="Nu bijwerken", bg="#ffffff", fg=T.ACCENT_MID, width=16,
                                    font=self.F["bold"], cursor="hand2", padx=6, pady=3)
         self.update_btn.pack(side="right", padx=10)
         self.update_btn.bind("<Button-1>", lambda e: self.install_update(info))
         later = tk.Label(b, text="Later", bg=T.ACCENT_MID, fg="#e0e3ff", font=self.F["small"], cursor="hand2")
         later.pack(side="right")
         later.bind("<Button-1>", lambda e: b.pack_forget())
+        self.update_later = later
         b.pack(fill="x", padx=14, pady=(0, 4), before=self.nb)
 
     def install_update(self, info):
@@ -141,9 +143,11 @@ class App(tk.Tk):
                           "(bewaarde identiteiten blijven bewaard). Doorgaan?"):
             return
         self.update_btn.unbind("<Button-1>")
+        self.update_btn.configure(text="Downloaden…", cursor="")
+        self.update_later.pack_forget()
 
         def progress(frac):
-            self.after(0, lambda: self.update_btn.configure(text=f"  Downloaden… {int(frac * 100)}%  "))
+            self.after(0, lambda: self.update_btn.configure(text=f"Downloaden… {int(frac * 100)}%"))
 
         def work():
             try:
@@ -157,15 +161,21 @@ class App(tk.Tk):
         threading.Thread(target=work, daemon=True).start()
 
     def _finish_update(self, new_exe):
-        self.update_btn.configure(text="  Herstarten…  ")
-        self.update_idletasks()
-        try:
-            self.mgr.close_all()
-            updater.install_and_restart(new_exe)
-        except OSError as e:
-            messagebox.showerror("Update", f"Kon de update niet installeren: {e}")
-            return
-        self.destroy()
+        self.update_btn.configure(text="Herstarten…")
+
+        # Vensters sluiten kan even duren: op de achtergrond, zodat de app
+        # zichzelf blijft tekenen (anders blijven er stukjes oude tekst staan).
+        def work():
+            try:
+                self.mgr.close_all()
+                updater.install_and_restart(new_exe)
+            except OSError as e:
+                err = str(e)
+                self.after(0, lambda: messagebox.showerror("Update", f"Kon de update niet installeren: {err}"))
+                return
+            self.after(0, self.destroy)
+
+        threading.Thread(target=work, daemon=True).start()
 
     def _set_icon(self):
         try:
