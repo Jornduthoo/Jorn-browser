@@ -89,7 +89,7 @@ DEFAULT_CONFIG = {
     # Plakken in de DevTools-console zonder eerst "allow pasting" te typen
     "devtools_allow_paste": True,
     # Venster bij het openen: "normal", "maximized" of "fullscreen" (F11)
-    "window_mode": "fullscreen",
+    "window_mode": "maximized",
 }
 
 WINDOW_MODES = {"Normaal venster": "normal", "Gemaximaliseerd": "maximized",
@@ -142,6 +142,11 @@ def load_config() -> dict:
         if cfg.get("start_url") in ("", "about:blank"):
             cfg["start_url"] = DEFAULT_CONFIG["start_url"]
         cfg["config_version"] = 2
+    if cfg.get("config_version", 1) < 3:
+        # v3: standaard gemaximaliseerd i.p.v. volledig scherm (v1.0.16 zette dat per ongeluk)
+        if cfg.get("window_mode") == "fullscreen":
+            cfg["window_mode"] = "maximized"
+        cfg["config_version"] = 3
     return cfg
 
 
@@ -876,7 +881,7 @@ def build_args(chromium: Path, profile: Path, proxy: Proxy | None,
         args.append(f"--proxy-server={proxy.url}")
         # Lokale adressen niet via de proxy; DNS gaat bij socks5 via de proxy.
         args.append("--proxy-bypass-list=<-loopback>")
-    mode = cfg.get("window_mode", "fullscreen")
+    mode = cfg.get("window_mode", "maximized")
     if mode == "fullscreen":
         args.append("--start-fullscreen")
     elif mode == "maximized":
