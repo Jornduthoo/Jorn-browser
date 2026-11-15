@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8"><title>Brochure</title>
+<style>
+@page { size: A4 landscape; margin: 0; }
+:root{--perk:#f6eedb;--bruin:#6b4423;--rood:#8b2e2e;--jeans:#3b5b7f;--ink:#2b2118}
+*{box-sizing:border-box}
+body{margin:0;font-family:Caladea,'Bitstream Charter',Georgia,serif;color:var(--ink);font-size:10.3pt;line-height:1.4}
+.sheet{width:297mm;height:210mm;display:grid;grid-template-columns:repeat(3,99mm);page-break-after:always;overflow:hidden}
+.sheet:last-child{page-break-after:auto}
+.panel{padding:9mm 9mm;background:var(--perk);position:relative;overflow:hidden}
+.panel + .panel{border-left:0.2mm dashed #c9b99a}
+h1{font-size:25pt;line-height:1.05;margin:0;color:var(--rood);letter-spacing:1pt}
+h2{font-size:14pt;margin:0 0 2.5mm;color:#fff;background:var(--jeans);padding:1.5mm 3mm;border-radius:1mm}
+h2.rood{background:var(--rood)}h2.bruin{background:var(--bruin)}
+h3{font-size:11pt;margin:3mm 0 1mm;color:var(--jeans)}
+p{margin:0 0 2.2mm}
+.front{display:flex;flex-direction:column;align-items:center;text-align:center;padding-top:8mm}
+.front img{width:72mm;height:112mm;object-fit:cover;border:1.2mm solid var(--bruin);margin:5mm 0 4mm}
+.front .auteur{font-size:15pt;color:var(--bruin);margin-top:2mm}
+.front .door{font-size:10pt;margin-top:3mm}
+.quote{font-style:italic;font-size:11pt;color:var(--jeans);border-left:1mm solid var(--rood);padding-left:3mm;margin:3mm 0;text-align:left}
+.quote small{display:block;font-style:normal;font-size:8.5pt;color:var(--ink);margin-top:1mm}
+.pers{margin-bottom:2.3mm}.pers b{color:var(--rood)}
+.thema{display:grid;grid-template-columns:1fr 1fr;gap:1.5mm 3mm;margin-bottom:3mm}
+.thema div{background:#fff;border:0.3mm solid var(--bruin);border-radius:1mm;padding:1.2mm 2mm;font-size:9.5pt}
+.score{font-size:20pt;color:var(--rood);text-align:center;margin:4mm 0 1mm}
+.foot{position:absolute;bottom:6mm;left:9mm;right:9mm;font-size:7.5pt;color:#8a7a62;text-align:center}
+.denim{height:5mm;background:repeating-linear-gradient(45deg,#3b5b7f 0 2px,#4a6d94 2px 4px);margin:-9mm -9mm 6mm}
+</style></head><body>
+
+<!-- BLAD 1 = BUITENKANT: [binnenflap | achterkant | voorkant] -->
+<div class="sheet">
+  <div class="panel">
+    <div class="denim"></div>
+    <h2 class="rood">Thema’s</h2>
+    <div class="thema">
+      <div>🛡️ Moed</div><div>🤝 Vriendschap</div>
+      <div>👑 Leiderschap</div><div>✝️ Geloof</div>
+      <div>🧠 Zelf nadenken</div><div>🎭 Bedrog</div>
+    </div>
+    <h2>De boodschap</h2>
+    <p>Volgens mij wil Thea Beckman zeggen dat je niet zomaar alles moet geloven wat iemand zegt, ook niet als die persoon de baas is. De kinderen in het boek doen gewoon wat de monniken zeggen, en dat is gevaarlijk.</p>
+    <p>Dolf denkt wél zelf na. Hij weet meer dan de anderen en gebruikt dat om hen te helpen. Dat vind ik de belangrijkste les van het boek.</p>
+    <div class="quote">‘Het werd kouder en kouder. Niets bleef hun bespaard. En al die tijd regende het.’<small>— hoofdstuk 13, De tocht door de Alpen (p. 215)</small></div>
+  </div>
+
+  <div class="panel">
+    <div class="denim"></div>
+    <h2 class="bruin">Mijn mening</h2>
+    <p>Ik vond <i>Kruistocht in spijkerbroek</i> een spannend boek. Het begin is wat rustig, maar zodra de tocht begint, wil je weten hoe het verder gaat.</p>
+    <p>Dolf vond ik het leukste personage. Hij is gewoon een jongen zoals wij, maar hij durft wel de leiding te nemen als het moet. Dom Anselmus vond ik de hele tijd verdacht. Je voelt meteen dat er iets niet klopt met hem.</p>
+    <p>Wat ik minder vond: soms staan er heel veel beschrijvingen in, en dan gaat het verhaal wat trager.</p>
+    <p>Ik vond het ook straf dat de Kinderkruistocht echt gebeurd is. Kinderen die honderden kilometers lopen, door de bergen, in de regen… Dat kan je je bijna niet voorstellen.</p>
+    <p><b>Aanrader voor iedereen die van avontuur en geschiedenis houdt!</b></p>
+    <div class="score">★★★★☆</div>
+    <p style="text-align:center">4 op 5</p>
+  </div>
+
+  <div class="panel front">
+    <h1>KRUISTOCHT<br>IN<br>SPIJKERBROEK</h1>
+    <div class="auteur">Thea Beckman</div>
+    <img src="cover_illustratie.png" alt="Dolf in jeans voor een rij kinderen in de Alpen">
+    <div class="quote" style="margin:0">‘Ik ben nu kruisvaarder en dat is waar het op aankomt.’<small>— Bertho (p. 61)</small></div>
+    <div class="door">Een boekvoorstelling door <b>Eli</b></div>
+  </div>
+</div>
+
+<!-- BLAD 2 = BINNENKANT: [luik 1 | luik 2 | luik 3] -->
+<div class="sheet">
+  <div class="panel">
+    <div class="denim"></div>
+    <h2>Over het boek</h2>
+    <p><i>Kruistocht in spijkerbroek</i> is een historische jeugdroman van de Nederlandse schrijfster Thea Beckman. Het boek verscheen in 1973 en won in 1974 de Gouden Griffel, een belangrijke prijs voor jeugdboeken.</p>
+    <p>Het verhaal speelt zich af in het jaar 1212, tijdens de Kinderkruistocht. Die heeft echt bestaan! Duizenden kinderen trokken toen te voet van Keulen over de Alpen naar Genua. Het is dus een avonturenverhaal, een geschiedenisboek en een tijdreisverhaal in één.</p>
+    <h3>Waarom koos ik dit boek?</h3>
+    <p>Dit is het lievelingsboek van mijn moemoe. Ze heeft me er vaak over verteld: over het tijdreizen en over de middeleeuwen. Dat leek me wel wat, en ik was benieuwd waarom zij het zo goed vond.</p>
+    <h3>Wat verwachtte ik?</h3>
+    <p>Ik dacht dat het een grappig avontuur zou worden over een jongen in jeans tussen de ridders. Maar het boek is veel spannender en ook serieuzer dan ik dacht. Het gaat vooral over overleven en over de vraag wie je kunt vertrouwen.</p>
+  </div>
+
+  <div class="panel">
+    <div class="denim"></div>
+    <h2 class="rood">Waar gaat het over?</h2>
+    <p>Dolf Wega is een gewone jongen uit Amstelveen. Hij meldt zich als vrijwilliger voor een experiment met een tijdmachine. Zijn plan is eenvoudig: even terug in de tijd om een riddertoernooi in het Franse Montgivray te bekijken, en daarna weer naar huis. Maar er gaat iets mis. Door een rekenfout belandt Dolf in het jaar 1212.</p>
+    <p>Daar komt hij terecht tussen duizenden kinderen die vanuit Keulen op weg zijn naar Jeruzalem. Hun leider is Nicolaas, een herdersjongen in het wit. De kinderen geloven dat God hen geroepen heeft. Als ze in Genua aankomen, zal de zee voor hen openspliten, zodat ze zo naar het Heilige Land kunnen lopen.</p>
+    <p>Dolf weet dat dat niet zal gebeuren. De kinderen hebben weinig eten, slapen buiten en worden ziek. Daarom gebruikt hij wat hij uit zijn eigen tijd weet. Hij verdeelt het eten eerlijk, maakt groepen en zorgt dat de kinderen rusten. Zo wordt hij stilaan de echte leider. Hij maakt ook vrienden, zoals Frank, de sterke Bertho, Carolus en het kleine meisje Mariecke.</p>
+    <p>Niet iedereen is blij met de slimme vreemdeling. De magere monnik Dom Anselmus vertrouwt Dolf niet. Anselmus wil zo snel mogelijk naar Genua, terwijl Dolf de kinderen wil laten rusten. Tijdens de zware tocht door de Alpen begint Dolf zich af te vragen wat de monniken echt van plan zijn. Kan hij de kinderen beschermen? En komt hij ooit nog terug naar zijn eigen tijd?</p>
+  </div>
+
+  <div class="panel">
+    <div class="denim"></div>
+    <h2 class="bruin">Wie is wie?</h2>
+    <div class="pers"><b>Dolf Wega</b> (Rudolf Wega van Amstelveen): een jongen uit onze tijd. Hij is slim, nuchter en moedig, en hij wordt de leider van de kinderen.</div>
+    <div class="pers"><b>Nicolaas</b>: de herdersjongen die de kruistocht leidt. Hij luistert vaak naar Dom Anselmus.</div>
+    <div class="pers"><b>Dom Anselmus</b>: een magere, strenge monnik. Hij werkt Dolf de hele tijd tegen.</div>
+    <div class="pers"><b>Dom Johannis</b>: de tweede monnik. Hij is jonger en vriendelijker dan Anselmus.</div>
+    <div class="pers"><b>Carolus</b>: schildknaap van de graaf van Marburg. Hij zou de nieuwe koning van Jeruzalem worden.</div>
+    <div class="pers"><b>Bertho</b>: een grote, sterke jongen die niets over zijn vroegere leven wil vertellen.</div>
+    <div class="pers"><b>Mariecke</b>: een klein meisje dat Dolf overal volgt. Ze denkt dat hij “van edel bloed” is.</div>
+    <div class="pers"><b>Frank</b>: een rustige jongen en een vriend van Dolf.</div>
+    <div class="quote">‘Ik zal de echte, nieuwe koning worden.’<small>— Carolus (p. 225)</small></div>
+  </div>
+</div>
+</body></html>
