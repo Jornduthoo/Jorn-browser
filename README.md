@@ -97,6 +97,12 @@ haar **eigen VPN-server**:
 - Valt de VPN weg, dan kan de browser nergens heen. Je echte IP lekt niet.
 - DNS-opvragingen gaan ook door de VPN.
 
+**Land of server kiezen**: op het tabblad *Identiteit* staat de lijst **VPN-land**.
+Kies *Automatisch (alle landen)*, een land (bv. *België*) of één bepaalde server.
+Klik daarna op **Nieuwe identiteit** of **Extra venster**. Het land wordt herkend
+aan de bestandsnaam (bv. `be-bru-wg-101.conf` of `Belgie.conf`).
+Bewaarde identiteiten houden altijd hun eigen server.
+
 Werkt een server niet, dan probeert Jorn Browser automatisch de volgende.
 **Trage servers worden overgeslagen**: bij elke verbinding meet Jorn Browser de
 reactietijd. Is een server trager dan 500 ms (instelbaar in het tabblad *Netwerk*),

@@ -94,6 +94,9 @@ DEFAULT_CONFIG = {
     # overslaan. Een lopende verbinding wordt nooit gewisseld of verbroken.
     "skip_slow_servers": True,
     "max_latency_ms": 500,
+    # Welke VPN-servers nieuwe vensters gebruiken: "" = alle,
+    # "country:be" = alleen dat land, "server:<bestandsnaam>" = precies die server
+    "vpn_choice": "",
 }
 
 WINDOW_MODES = {"Normaal venster": "normal", "Gemaximaliseerd": "maximized",
@@ -424,6 +427,67 @@ def vpn_dir() -> Path:
 
 def list_vpn_configs() -> list[Path]:
     return sorted(p for p in vpn_dir().glob("*.conf") if p.is_file())
+
+
+COUNTRY_NAMES = {
+    "al": "Albanië", "at": "Oostenrijk", "au": "Australië", "be": "België", "bg": "Bulgarije",
+    "br": "Brazilië", "ca": "Canada", "ch": "Zwitserland", "cz": "Tsjechië", "de": "Duitsland",
+    "dk": "Denemarken", "ee": "Estland", "es": "Spanje", "fi": "Finland", "fr": "Frankrijk",
+    "gb": "Verenigd Koninkrijk", "uk": "Verenigd Koninkrijk", "gr": "Griekenland", "hk": "Hongkong",
+    "hr": "Kroatië", "hu": "Hongarije", "ie": "Ierland", "il": "Israël", "it": "Italië",
+    "jp": "Japan", "lu": "Luxemburg", "lv": "Letland", "md": "Moldavië", "mx": "Mexico",
+    "nl": "Nederland", "no": "Noorwegen", "nz": "Nieuw-Zeeland", "pl": "Polen", "pt": "Portugal",
+    "ro": "Roemenië", "rs": "Servië", "se": "Zweden", "sg": "Singapore", "si": "Slovenië",
+    "sk": "Slowakije", "tr": "Turkije", "ua": "Oekraïne", "us": "Verenigde Staten", "za": "Zuid-Afrika",
+}
+# bv. "be-bru-wg-101", "mullvad-be3", "be_brussels", "BE-Brussel"
+_COUNTRY_RE = re.compile(r"^(?:mullvad[-_])?([a-z]{2})(?:[-_ ]|\d)", re.I)
+_COUNTRY_WORDS = {"belgie": "be", "belgië": "be", "belgium": "be", "nederland": "nl",
+                  "netherlands": "nl", "duitsland": "de", "germany": "de", "frankrijk": "fr",
+                  "france": "fr", "luxemburg": "lu", "luxembourg": "lu"}
+
+
+def vpn_country(conf: Path) -> str:
+    """Landcode uit de bestandsnaam (leeg als onbekend)."""
+    stem = conf.stem.lower()
+    for word, code in _COUNTRY_WORDS.items():
+        if word in stem:
+            return code
+    m = _COUNTRY_RE.match(stem)
+    return m.group(1).lower() if m and m.group(1).lower() in COUNTRY_NAMES else ""
+
+
+def vpn_choices() -> list[tuple[str, str]]:
+    """(label, sleutel) voor de keuzelijst: automatisch, per land, per server."""
+    configs = list_vpn_configs()
+    out = [("Automatisch (alle landen)", "")]
+    counts: dict[str, int] = {}
+    for c in configs:
+        code = vpn_country(c)
+        if code:
+            counts[code] = counts.get(code, 0) + 1
+    for code in sorted(counts, key=lambda k: COUNTRY_NAMES[k]):
+        out.append((f"{COUNTRY_NAMES[code]}  ({counts[code]} server{'s' if counts[code] != 1 else ''})",
+                    f"country:{code}"))
+    for c in configs:
+        out.append((f"Server: {c.stem}", f"server:{c.name}"))
+    return out
+
+
+def filter_vpn_configs(configs: list[Path], choice: str) -> list[Path]:
+    if choice.startswith("country:"):
+        return [c for c in configs if vpn_country(c) == choice[8:]]
+    if choice.startswith("server:"):
+        return [c for c in configs if c.name == choice[7:]]
+    return configs
+
+
+def describe_vpn_choice(choice: str) -> str:
+    if choice.startswith("country:"):
+        return COUNTRY_NAMES.get(choice[8:], choice[8:].upper())
+    if choice.startswith("server:"):
+        return Path(choice[7:]).stem
+    return "alle landen"
 
 
 def import_vpn_configs(paths: list[str | Path]) -> int:
@@ -1198,6 +1262,16 @@ class IdentityManager:
             raise ValueError("Alle VPN-servers zijn al in gebruik door een open identiteit. "
                              "Voeg meer .conf-bestanden toe of sluit een identiteit.")
         preferred = next((c for c in free if c.name == prefer), None) if prefer else None
+        choice = self.cfg.get("vpn_choice", "")
+        if not prefer and choice:  # gekozen land/server (bewaarde identiteiten houden hun eigen server)
+            wanted = filter_vpn_configs(configs, choice)
+            if not wanted:
+                raise ValueError(f"Geen VPN-servers voor '{describe_vpn_choice(choice)}'. "
+                                 "Kies iets anders in de lijst 'VPN-land' of voeg servers toe.")
+            free = [c for c in free if c in wanted]
+            if not free:
+                raise ValueError(f"Alle servers voor '{describe_vpn_choice(choice)}' zijn al in gebruik "
+                                 "door een open venster. Sluit er een of kies een ander land.")
         if preferred:  # bewaarde identiteit: eerst haar eigen server (= zelfde IP), ook als die traag is
             tunnel = VpnTunnel(preferred, profile)
             try:

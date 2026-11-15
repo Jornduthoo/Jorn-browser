@@ -222,6 +222,16 @@ class App(tk.Tk):
         T.GradientButton(row, "＋  Extra venster", self.extra_identity, height=44, radius=10, colors=sec,
                          font=self.F["bold"]).grid(row=0, column=2, sticky="ew")
 
+        vrow = ttk.Frame(f)
+        vrow.pack(fill="x", pady=(10, 0))
+        ttk.Label(vrow, text="VPN-land:").pack(side="left")
+        self.vpn_choice = tk.StringVar()
+        self.vpn_box = ttk.Combobox(vrow, textvariable=self.vpn_choice, state="readonly")
+        self.vpn_box.pack(side="left", fill="x", expand=True, padx=(8, 0))
+        self.vpn_box.bind("<<ComboboxSelected>>", self._on_vpn_choice)
+        self.vpn_box.bind("<Button-1>", lambda e: self._refresh_vpn_choices(), add="+")
+        self._refresh_vpn_choices()
+
         c = T.card(f)
         c.outer.pack(fill="x", pady=(14, 0))
         top = ttk.Frame(c, style="Card.TFrame")
@@ -520,6 +530,23 @@ class App(tk.Tk):
         else:
             self.status.set(msg)
 
+    def _refresh_vpn_choices(self):
+        self._vpn_choices = core.vpn_choices()
+        self.vpn_box.configure(values=[label for label, _ in self._vpn_choices])
+        key = self.cfg.get("vpn_choice", "")
+        label = next((lbl for lbl, k in self._vpn_choices if k == key), None)
+        if label is None:  # gekozen server/land bestaat niet meer
+            label, key = self._vpn_choices[0]
+            self.cfg["vpn_choice"] = key
+        self.vpn_choice.set(label)
+
+    def _on_vpn_choice(self, _e=None):
+        key = next((k for lbl, k in self._vpn_choices if lbl == self.vpn_choice.get()), "")
+        self.cfg["vpn_choice"] = key
+        core.save_config(self.cfg)
+        self.status.set(f"✔ Nieuwe vensters gebruiken VPN: {core.describe_vpn_choice(key)}. "
+                        "Klik op Nieuwe identiteit om te wisselen.")
+
     def new_identity(self):
         self._run_bg(self.mgr.new_identity, lambda i: f"✔ {i.describe()}", "Nieuwe identiteit starten…")
 
@@ -730,6 +757,7 @@ class App(tk.Tk):
             return
         self._refresh_proxy_count()
         self._refresh_pill()
+        self._refresh_vpn_choices()
         self.status.set(f"✔ {n} VPN-server(s) toegevoegd.")
 
     def _refresh_extensions(self):
