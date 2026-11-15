@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8"><title>Visuals</title>
+<style>
+@page{size:A4;margin:10mm}
+*{box-sizing:border-box}
+body{margin:0;font-family:Caladea,Georgia,serif;color:#000}
+.page{page-break-after:always;height:277mm;display:flex;flex-direction:column;gap:6mm}
+.page:last-child{page-break-after:auto}
+h1{font-size:24pt;margin:0;text-align:center}
+.grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(3,minmax(0,1fr));gap:6mm;flex:1;min-height:0}
+.pc{min-height:0;border:1mm solid #000;outline:0.3mm dashed #000;outline-offset:2mm;display:flex;flex-direction:column;align-items:center;padding:3mm;overflow:hidden}
+.pc img{width:100%;flex:1;min-height:0;object-fit:contain}
+.pc .naam{font-size:20pt;font-weight:700;background:#000;color:#fff;padding:1mm 4mm;margin-top:2mm}
+.pc .wie{font-size:11pt;text-align:center;margin-top:1mm}
+.scene{border:1mm solid #000;outline:0.3mm dashed #000;outline-offset:2mm;flex:1;display:flex;flex-direction:column;padding:3mm;min-height:0}
+.scene img{width:100%;flex:1;min-height:0;object-fit:contain}
+.scene .cap{font-size:15pt;text-align:center;font-style:italic;margin-top:2mm}
+</style></head><body>
+
+<div class="page"><h1>Personages</h1>
+<div class="grid">
+  <div class="pc"><img src="personages/dolf.png"><div class="naam">Dolf Wega</div><div class="wie">jongen uit onze tijd, wordt de leider</div></div>
+  <div class="pc"><img src="personages/nicolaas.png"><div class="naam">Nicolaas</div><div class="wie">herdersjongen in het wit, leider van de kruistocht</div></div>
+  <div class="pc"><img src="personages/anselmus.png"><div class="naam">Dom Anselmus</div><div class="wie">magere, strenge monnik</div></div>
+  <div class="pc"><img src="personages/carolus.png"><div class="naam">Carolus</div><div class="wie">schildknaap, toekomstige koning van Jeruzalem</div></div>
+  <div class="pc"><img src="personages/bertho.png"><div class="naam">Bertho</div><div class="wie">grote, sterke jongen</div></div>
+  <div class="pc"><img src="personages/mariecke.png"><div class="naam">Mariecke</div><div class="wie">klein meisje dat Dolf volgt</div></div>
+</div></div>
+
+<div class="page">
+  <div class="scene"><img src="tekeningen/1_tijdmachine.png"><div class="cap">Dolf stapt in de tijdmachine…</div></div>
+  <div class="scene"><img src="tekeningen/2_kinderkruistocht.png"><div class="cap">…en belandt in 1212, tussen duizenden kinderen.</div></div>
+</div>
+
+<div class="page">
+  <div class="scene"><img src="tekeningen/3_monnik.png"><div class="cap">Kun je Dom Anselmus vertrouwen?</div></div>
+  <div class="scene"><img src="tekeningen/4_genua.png"><div class="cap">Genua: splijt de zee echt open?</div></div>
+</div>
+</body></html>
