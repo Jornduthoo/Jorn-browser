@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8"><title>Bordteksten</title>
+<style>
+@page { size: A4; margin: 10mm; }
+@page landscape { size: A4 landscape; margin: 8mm; }
+:root{--perk:#f6eedb;--bruin:#6b4423;--rood:#8b2e2e;--jeans:#3b5b7f;--ink:#2b2118}
+*{box-sizing:border-box}
+body{margin:0;font-family:Caladea,'Bitstream Charter',Georgia,serif;color:var(--ink);font-size:17pt;line-height:1.35}
+.page{page-break-after:always;display:flex;flex-direction:column;gap:7mm}
+.page:last-child{page-break-after:auto}
+.land{page:landscape;height:192mm;justify-content:center;align-items:center}
+.card{border:1.5mm solid var(--bruin);background:var(--perk);padding:6mm 8mm;outline:0.3mm dashed #999;outline-offset:3mm;break-inside:avoid}
+.card h2{margin:-6mm -8mm 4mm;padding:3mm 8mm;background:var(--jeans);color:#fff;font-size:22pt;letter-spacing:.5pt}
+.card.rood h2{background:var(--rood)}
+.card.bruin h2{background:var(--bruin)}
+.card p{margin:0 0 3mm}.card p:last-child{margin:0}
+ul{margin:0;padding-left:7mm}li{margin-bottom:2mm}
+.titel{text-align:center;border:2mm solid var(--jeans);background:var(--perk);padding:10mm 14mm;width:100%}
+.titel h1{font-size:62pt;line-height:1.05;margin:0;color:var(--rood);letter-spacing:2pt}
+.titel .auteur{font-size:32pt;margin-top:6mm;color:var(--bruin)}
+.titel .klein{font-size:16pt;margin-top:3mm}
+.slogan{font-size:28pt;font-style:italic;text-align:center;color:var(--jeans)}
+.quote{font-size:21pt;font-style:italic}
+.quote .bron{display:block;font-size:14pt;font-style:normal;margin-top:3mm;text-align:right}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:9mm}
+.pers{font-size:15pt}.pers h2{font-size:19pt}
+.route{display:flex;align-items:center;justify-content:space-between;font-size:15pt;text-align:center;gap:2mm}
+.route span.stop{background:#fff;border:0.6mm solid var(--bruin);border-radius:3mm;padding:2mm 3mm;flex:1}
+.route span.pijl{color:var(--rood);font-size:20pt}
+.icons{display:grid;grid-template-columns:1fr 1fr;gap:3mm 6mm;font-size:17pt}
+.cover{width:100%;max-height:250mm;object-fit:contain;border:1.5mm solid var(--bruin)}
+.hint{font-size:10pt;color:#777;text-align:center;font-family:Inter,sans-serif}
+</style><style>
+:root{--perk:#fff;--bruin:#000;--rood:#000;--jeans:#000;--ink:#000}
+body,.card,.titel{background:#fff!important;color:#000!important}
+.card h2{background:#000!important;color:#fff!important}
+.titel h1,.titel .auteur,.slogan{color:#000!important}
+.cover{filter:grayscale(1) contrast(1.3)}
+.route span.stop{border-color:#000}
+</style></head><body>
+
+<!-- PAGINA 1: titel (liggend) -->
+<div class="page land">
+  <div class="titel">
+    <h1>KRUISTOCHT IN<br>SPIJKERBROEK</h1>
+    <div class="auteur">Thea Beckman</div>
+    <div class="klein">1973 · Gouden Griffel 1974</div>
+  </div>
+</div>
+
+<!-- PAGINA 2: slogan + genre + thema's -->
+<div class="page">
+  <div class="card"><p class="slogan">“Eén jongen uit de toekomst.<br>Duizenden kinderen op weg naar een wonder dat niet komt.”</p></div>
+  <div class="card bruin"><h2>Genre</h2>
+    <p>Historische jeugdroman · avontuur · tijdreizen</p>
+    <p>Het verhaal speelt zich af in <b>1212</b>, tijdens de <b>Kinderkruistocht</b>. Die heeft echt bestaan!</p></div>
+  <div class="card rood"><h2>Thema’s</h2>
+    <div class="icons">
+      <div>• Moed</div><div>• Vriendschap</div>
+      <div>• Leiderschap</div><div>• Geloof</div>
+      <div>• Zelf nadenken</div><div>• Bedrog</div>
+    </div></div>
+  <div class="hint">✂ knip langs de stippellijn</div>
+</div>
+
+<!-- PAGINA 3: samenvatting -->
+<div class="page">
+  <div class="card"><h2>Waar gaat het over?</h2>
+    <p>Dolf Wega (Rudolf Wega van Amstelveen) doet mee aan een experiment met een tijdmachine. Hij wil een riddertoernooi uit de middeleeuwen gaan bekijken. Maar er gaat iets mis en hij belandt in het jaar <b>1212</b>.</p>
+    <p>Daar komt hij terecht tussen duizenden kinderen die vanuit <b>Keulen</b> naar Jeruzalem willen lopen. Hun leider, de herdersjongen <b>Nicolaas</b>, belooft dat de zee bij <b>Genua</b> zal openspliten.</p>
+    <p>Dolf weet dat dit niet zal gebeuren. Hij probeert de kinderen te helpen met eten, rust en goede afspraken. Maar de monnik <b>Dom Anselmus</b> vertrouwt hem niet…</p>
+  </div>
+  <div class="card bruin"><h2>De route</h2>
+    <div class="route">
+      <span class="stop">Tijdmachine</span><span class="pijl">➜</span>
+      <span class="stop">Keulen</span><span class="pijl">➜</span>
+      <span class="stop">Langs de Rijn</span><span class="pijl">➜</span>
+      <span class="stop">De Alpen</span><span class="pijl">➜</span>
+      <span class="stop">Genua</span>
+    </div></div>
+  <div class="hint">✂ knip langs de stippellijn</div>
+</div>
+
+<!-- PAGINA 4: personages -->
+<div class="page">
+  <div class="grid">
+    <div class="card pers"><h2>• Dolf Wega</h2><p>Jongen uit Amstelveen uit onze tijd. Slim en nuchter. Wordt de echte leider van de kinderen.</p></div>
+    <div class="card pers rood"><h2>• Dom Anselmus</h2><p>Magere, strenge monnik. Vertrouwt Dolf niet en wil zo snel mogelijk naar Genua.</p></div>
+    <div class="card pers bruin"><h2>• Nicolaas</h2><p>Herdersjongen in het wit en leider van de kruistocht. Hij luistert vaak naar Dom Anselmus.</p></div>
+    <div class="card pers"><h2>• Carolus</h2><p>Schildknaap van de graaf van Marburg. Hij zou de nieuwe koning van Jeruzalem worden.</p></div>
+    <div class="card pers bruin"><h2>• Bertho</h2><p>Grote, sterke jongen. Wil niets over zijn vroegere leven vertellen. Nu is hij kruisvaarder.</p></div>
+    <div class="card pers"><h2>• Mariecke</h2><p>Klein meisje dat Dolf volgt. Ze denkt dat “Rudolf van edel bloed” is.</p></div>
+  </div>
+  <div class="hint">✂ knip langs de stippellijn</div>
+</div>
+
+<!-- PAGINA 5: conflict + boodschap -->
+<div class="page">
+  <div class="card rood"><h2>Het conflict</h2>
+    <p>Dolf en Dom Anselmus botsen. Anselmus wil zo snel mogelijk naar Genua. Dolf wil dat de kinderen eerst rusten en eten.</p>
+    <p>Hoe verder ze lopen, hoe meer Dolf zich afvraagt: <b>waarom hebben de monniken zo’n haast?</b></p>
+    <p><i>Wat hij ontdekt? Lees het boek!</i></p></div>
+  <div class="card"><h2>De boodschap</h2>
+    <p>Geloof niet zomaar alles wat iemand zegt, ook niet als die persoon de baas is. Denk zelf na.</p>
+    <p>En als je iets weet waarmee je anderen kunt helpen, doe dat dan ook.</p></div>
+  <div class="hint">✂ knip langs de stippellijn</div>
+</div>
+
+<!-- PAGINA 6: mening + citaten -->
+<div class="page">
+  <div class="card bruin"><h2>Mijn mening ★★★★☆</h2>
+    <p>Ik vond het een spannend boek. Ik koos het omdat het het lievelingsboek van mijn moemoe is. Ze vertelde me over het tijdreizen en de middeleeuwen, en dat leek me wel wat.</p>
+    <p>+ Dolf is gewoon een jongen, maar hij durft wel iets te doen als het moet. Dat vond ik cool.</p>
+    <p>– Soms staan er veel beschrijvingen in, dan gaat het wat traag.</p>
+    <p>★ Favoriet: Dolf. Anselmus vond ik de hele tijd verdacht!</p></div>
+  <div class="card rood"><p class="quote">‘Het werd kouder en kouder. Niets bleef hun bespaard. En al die tijd regende het.’<span class="bron">— hoofdstuk 13, De tocht door de Alpen (p. 215)</span></p></div>
+  <div class="card"><p class="quote">‘Ik ben nu kruisvaarder en dat is waar het op aankomt.’<span class="bron">— Bertho (p. 61)</span></p></div>
+  <div class="hint">✂ knip langs de stippellijn</div>
+</div>
+
+<!-- PAGINA 7: illustratie -->
+<div class="page">
+  <img class="cover" src="cover_illustratie.png" alt="Dolf in jeans voor een rij kinderen in de Alpen">
+  <div class="hint">Illustratie gemaakt met AI (Gemini)</div>
+</div>
+</body></html>
