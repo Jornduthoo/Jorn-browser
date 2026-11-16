@@ -16,6 +16,10 @@ Bij "Nieuwe identiteit" (of Ctrl+N) gebeurt dit binnen 1 à 2 seconden:
 2. Cookies, cache, geschiedenis en logins worden gewist.
 3. Er start een vers venster via een **andere VPN-server**, dus met een ander IP.
 
+**🧹 Bezemknop**: net als in Tor Browser staat er een bezempje in de werkbalk van
+elk venster. Klik erop (of druk **Ctrl+Shift+U**) en alles wordt gewist en er opent
+meteen een nieuwe identiteit met een nieuw IP.
+
 Ook inbegrepen:
 
 - **Chrome-extensies**: plak een link uit de Chrome Web Store, klaar.

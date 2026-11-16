@@ -752,6 +752,72 @@ def search_extension(cfg: dict) -> Path | None:
     return target
 
 
+# Bezemknop in de werkbalk (zoals in Tor Browser): klik of Ctrl+Shift+U opent een
+# extensiepagina; Jorn Browser ziet die via de lokale DevTools-poort en start dan
+# meteen een nieuwe identiteit. De vaste sleutel geeft altijd dezelfde ID, zodat
+# de knop vastgezet kan worden.
+NEWID_EXT_ID = "laakkngdpgjdhkaoccjikocponblepkk"
+NEWID_PAGE = "nieuwe-identiteit.html"
+NEWID_KEY = ("MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1Vs83neXEbA/HUYq9o9JDBLP/9T4Qr4Thi5MkoCnC3aThVkc2iGDUxgQXu78sOGhA0EI+Jsh/n6yjO8JqmfZbs7C3yVj5MR2nrx7ZyXCP0pgUZe3Jzn8iPI8yxwXKQnJU1fv88iY7f4ZSMBpbM25o9j/J9TmcUWn7LOr53LNvOkjsqXCvD7jDb5eg4VHlEWPIuxTW8B2spwHWqWJgxm26+5X0OD5n7TnQhqpz9asTKVCKA8A7IiwEPVmnaJrpsSFhlaHERFVbD2YR8OB9QzidZJopNaKbaXsx3dj93QZ/ZMR60aaaFXksPzkBpU2AWDicRQliiG0CivTz1A9IUepwQIDAQAB")
+
+
+def asset_path(name: str) -> Path:
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))
+    return base / "assets" / name
+
+
+def newid_extension() -> Path:
+    target = builtin_dir() / "newid"
+    target.mkdir(parents=True, exist_ok=True)
+    icons = {str(n): f"broom-{n}.png" for n in (16, 32, 48, 128)}
+    manifest = {
+        "manifest_version": 3,
+        "name": "Nieuwe identiteit",
+        "version": "1.0",
+        "description": "Alles wissen en meteen een nieuwe identiteit (nieuw IP) starten.",
+        "key": NEWID_KEY,
+        "icons": icons,
+        "action": {"default_icon": icons, "default_title": "Nieuwe identiteit (Ctrl+Shift+U)"},
+        "background": {"service_worker": "sw.js"},
+        "commands": {"nieuwe-identiteit": {
+            "suggested_key": {"default": "Ctrl+Shift+U"},
+            "description": "Nieuwe identiteit"}},
+    }
+    files = {
+        "manifest.json": json.dumps(manifest, indent=2),
+        "sw.js": ("function go() { chrome.tabs.create({ url: chrome.runtime.getURL('"
+                  + NEWID_PAGE + "') }); }\n"
+                  "chrome.action.onClicked.addListener(go);\n"
+                  "chrome.commands.onCommand.addListener((c) => { if (c === 'nieuwe-identiteit') go(); });\n"),
+        NEWID_PAGE: ("<!doctype html><meta charset='utf-8'><title>Nieuwe identiteit…</title>"
+                     "<body style='background:#0f1220;color:#e6e8f2;font:20px Segoe UI,sans-serif;"
+                     "display:grid;place-items:center;height:90vh'>"
+                     "<div>🧹 Nieuwe identiteit wordt gestart…</div>"),
+    }
+    for name, text in files.items():
+        f = target / name
+        if not f.exists() or f.read_text(encoding="utf-8") != text:
+            f.write_text(text, encoding="utf-8")
+    for name in icons.values():
+        src, dst = asset_path(name), target / name
+        if src.is_file() and (not dst.exists() or dst.stat().st_size != src.stat().st_size):
+            shutil.copyfile(src, dst)
+    return target
+
+
+def newid_requested(profile: Path, timeout: float = 0.5) -> bool:
+    """Werd in dit venster op de bezemknop geklikt? (lokale DevTools-poort)"""
+    try:
+        port = int((profile / "DevToolsActivePort").read_text(encoding="utf-8").split()[0])
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(f"http://127.0.0.1:{port}/json/list", timeout=timeout) as r:
+            targets = json.loads(r.read())
+    except (OSError, ValueError, IndexError):
+        return False
+    want = f"chrome-extension://{NEWID_EXT_ID}/{NEWID_PAGE}"
+    return any(isinstance(t, dict) and str(t.get("url", "")).startswith(want) for t in targets)
+
+
 # --------------------------------------------------------------------------- bladwijzers
 #
 # Eén centrale bladwijzerlijst (data/bookmarks/Bookmarks) voor alle identiteiten.
@@ -789,6 +855,8 @@ def seed_profile(profile: Path) -> str:
         prefs.setdefault("bookmark_bar", {})["show_on_all_tabs"] = True
         changed = True
     pinned = load_pinned_extensions()
+    if NEWID_EXT_ID not in pinned:  # bezemknop altijd zichtbaar in de werkbalk
+        pinned = [NEWID_EXT_ID] + pinned
     log(f"start profiel {profile.name}: vastgezet={pinned}, bladwijzers={'ja' if digest else 'nee'}")
     if pinned and prefs.get("extensions", {}).get("pinned_extensions") != pinned:
         prefs.setdefault("extensions", {})["pinned_extensions"] = pinned
@@ -1215,6 +1283,10 @@ class IdentityManager:
                     ext_base = None
                     log(f"sjabloon toepassen mislukt: {e}")
         exts = [e.path for e in list_extensions() if e.enabled]
+        try:
+            exts.append(newid_extension())
+        except OSError as e:
+            log(f"bezemknop niet beschikbaar: {e}")
         search_ext = search_extension(self.cfg)
         if search_ext:
             exts.append(search_ext)
@@ -1491,6 +1563,9 @@ class IdentityManager:
     def open_template(self) -> Identity:
         """Open het sjabloon om extensies in te stellen."""
         return self.spawn(url="chrome://extensions/", saved=template_identity())
+
+    def newid_requested(self) -> bool:
+        return any(i.alive() and newid_requested(i.profile) for i in list(self.identities))
 
     def reap(self) -> list[Identity]:
         """Ruim identiteiten op waarvan de gebruiker het venster zelf sloot."""

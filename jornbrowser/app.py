@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 import webbrowser
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
@@ -83,6 +84,7 @@ class App(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.after(1000, self._tick)
         self._refresh_identities()
+        threading.Thread(target=self._watch_broom, daemon=True).start()
 
         if not core.find_chromium(self.cfg):
             self.after(300, self._warn_no_chromium)
@@ -805,6 +807,18 @@ class App(tk.Tk):
             self._refresh_identities()
             self.status.set("Gesloten venster gewist.")
         self.after(1000, self._tick)
+
+    def _watch_broom(self):
+        """Kijk elke seconde of in een venster op de bezemknop geklikt werd (zoals Tor)."""
+        while True:
+            time.sleep(1)
+            try:
+                if not getattr(self, "_busy", False) and self.mgr.newid_requested():
+                    core.log("bezemknop: nieuwe identiteit")
+                    self.after(0, self.new_identity)
+                    time.sleep(3)  # niet dubbel starten terwijl de vensters sluiten
+            except Exception:  # noqa: BLE001
+                pass
 
     def _warn_no_chromium(self):
         messagebox.showinfo(
